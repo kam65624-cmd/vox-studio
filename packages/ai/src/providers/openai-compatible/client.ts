@@ -159,16 +159,51 @@ export class OpenAICompatibleClient {
         };
       }
 
-      const json = await response.json();
-      const requestId = response.headers.get("x-request-id") || json.id || undefined;
-      const text = json.choices?.[0]?.message?.content || "";
-      const usage = json.usage
-        ? {
+      const contentType = response.headers.get("content-type") || "";
+      const isStreamResponse = contentType.includes("text/event-stream") || request.stream === true;
+
+      let text = "";
+      let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+      let requestId = response.headers.get("x-request-id") || undefined;
+      let rawJson: any = undefined;
+
+      if (isStreamResponse) {
+        const rawText = await response.text();
+        const lines = rawText.split("\n");
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "data: [DONE]") continue;
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const chunkJson = JSON.parse(trimmed.slice(6));
+              if (!requestId && chunkJson.id) requestId = chunkJson.id;
+              const deltaContent = chunkJson.choices?.[0]?.delta?.content || chunkJson.choices?.[0]?.message?.content || "";
+              text += deltaContent;
+              if (chunkJson.usage) {
+                usage = {
+                  promptTokens: chunkJson.usage.prompt_tokens || 0,
+                  completionTokens: chunkJson.usage.completion_tokens || 0,
+                  totalTokens: chunkJson.usage.total_tokens || 0,
+                };
+              }
+            } catch {
+              // ignore invalid line
+            }
+          }
+        }
+      } else {
+        const json = await response.json();
+        rawJson = json;
+        requestId = requestId || json.id || undefined;
+        text = json.choices?.[0]?.message?.content || "";
+        if (json.usage) {
+          usage = {
             promptTokens: json.usage.prompt_tokens || 0,
             completionTokens: json.usage.completion_tokens || 0,
             totalTokens: json.usage.total_tokens || 0,
-          }
-        : undefined;
+          };
+        }
+      }
 
       let structuredOutput: Record<string, any> | undefined;
       if (request.response_format?.type === "json_object" || text.trim().startsWith("{")) {
@@ -188,7 +223,7 @@ export class OpenAICompatibleClient {
         requestId,
         usage,
         latencyMs,
-        rawResponse: json,
+        rawResponse: rawJson,
       };
     } catch (err: any) {
       clearTimeout(timeoutId);
@@ -221,6 +256,152 @@ export class OpenAICompatibleClient {
         provider: this.providerId,
         latencyMs,
         error: execError,
+      };
+    }
+  }
+
+  public async imageGeneration(
+    request: {
+      model?: string | undefined;
+      prompt: string;
+      width?: number | undefined;
+      height?: number | undefined;
+    },
+    customFetch?: typeof globalThis.fetch
+  ): Promise<NormalizedProviderResponse> {
+    const startTime = Date.now();
+    const model = request.model || this.defaultModel;
+
+    if (!this.isConfigured()) {
+      const err = new ProviderExecutionError(
+        "AUTH_ERROR",
+        `API key not configured for provider ${this.providerId}. Set environment variable or pass key.`,
+        this.providerId,
+        model,
+        false
+      );
+      return {
+        success: false,
+        text: "",
+        model,
+        provider: this.providerId,
+        latencyMs: Date.now() - startTime,
+        error: err,
+      };
+    }
+
+    const fetchFn = customFetch || globalThis.fetch;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    const size = `${request.width || 1024}x${request.height || 1024}`;
+    const payload = {
+      model,
+      prompt: request.prompt,
+      n: 1,
+      size,
+      response_format: "url",
+    };
+
+    const url = `${this.baseUrl}/images/generations`;
+
+    try {
+      let response = await fetchFn(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (response.status === 404) {
+        const altUrl = `${this.baseUrl}/images/edits`;
+        const altResponse = await fetchFn(altUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        if (altResponse.ok || altResponse.status !== 404) {
+          response = altResponse;
+        }
+      }
+
+      clearTimeout(timeoutId);
+      const latencyMs = Date.now() - startTime;
+
+      if (!response.ok) {
+        let errorBody = "";
+        try {
+          errorBody = await response.text();
+        } catch {
+          errorBody = response.statusText;
+        }
+
+        let code: ProviderExecutionError["code"] = "PROVIDER_ERROR";
+        let isTransient = false;
+        if (response.status === 401 || response.status === 403) {
+          code = "AUTH_ERROR";
+        } else if (response.status === 429) {
+          code = "RATE_LIMIT";
+          isTransient = true;
+        } else if (response.status === 400 || response.status === 422) {
+          code = "INVALID_REQUEST";
+        } else if (response.status >= 500) {
+          code = "PROVIDER_NOT_CONFIGURED";
+          isTransient = true;
+        }
+
+        const sanitizedMsg = errorBody.replace(new RegExp(this.apiKey, "g"), "[REDACTED_API_KEY]");
+        return {
+          success: false,
+          text: "",
+          model,
+          provider: this.providerId,
+          latencyMs,
+          error: new ProviderExecutionError(
+            code,
+            `HTTP ${response.status} from ${this.displayName}: ${sanitizedMsg}`,
+            this.providerId,
+            model,
+            isTransient
+          ),
+        };
+      }
+
+      const json = await response.json();
+      const imageUrl = json.data?.[0]?.url || json.data?.[0]?.b64_json || json.url || "";
+      const requestId = response.headers.get("x-request-id") || json.id || undefined;
+
+      return {
+        success: true,
+        text: imageUrl,
+        model,
+        provider: this.providerId,
+        requestId,
+        latencyMs,
+        rawResponse: json,
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      return {
+        success: false,
+        text: "",
+        model,
+        provider: this.providerId,
+        latencyMs: Date.now() - startTime,
+        error: new ProviderExecutionError(
+          "UNKNOWN_ERROR",
+          err.message || String(err),
+          this.providerId,
+          model,
+          false
+        ),
       };
     }
   }
