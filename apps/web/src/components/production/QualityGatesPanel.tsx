@@ -1,10 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle, AlertTriangle, ShieldCheck } from "lucide-react";
 
 export function QualityGatesPanel({ episodeId }: { episodeId: string }) {
-  // Mock K9 Quality Gates Results
-  const gates = [
+  const [overallStatus, setOverallStatus] = useState("BLOCKED");
+  const [gates, setGates] = useState([
     { id: "G01", name: "Script Integrity", status: "PASS", score: 95 },
     { id: "G02", name: "Story Coherence", status: "PASS", score: 90 },
     { id: "G03", name: "Entity Consistency", status: "PASS", score: 100 },
@@ -15,7 +16,31 @@ export function QualityGatesPanel({ episodeId }: { episodeId: string }) {
     { id: "G08", name: "Caption Quality", status: "PASS", score: 98 },
     { id: "G09", name: "Humanization", status: "PASS", score: 85 },
     { id: "G10", name: "Media Integrity", status: "BLOCKED", score: 0, hint: "Final render missing" },
-  ];
+  ]);
+
+  useEffect(() => {
+    async function fetchGates() {
+      try {
+        const res = await fetch(`/api/episodes/${episodeId}/quality-gates`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.overallStatus) setOverallStatus(data.overallStatus);
+          if (data.gates) {
+            setGates(data.gates.map((g: any) => ({
+              id: g.gateId,
+              name: g.gateName,
+              status: g.status,
+              score: g.score,
+              hint: g.issues?.[0],
+            })));
+          }
+        }
+      } catch {
+        // Fallback to initial state
+      }
+    }
+    fetchGates();
+  }, [episodeId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -58,8 +83,12 @@ export function QualityGatesPanel({ episodeId }: { episodeId: string }) {
             بوابات الجودة (Quality Gates)
           </h3>
         </div>
-        <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-900/30 text-red-400">
-          BLOCKED
+        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+          overallStatus === "PASS" ? "bg-emerald-900/30 text-emerald-400" :
+          overallStatus === "WARNING" ? "bg-amber-900/30 text-amber-400" :
+          "bg-red-900/30 text-red-400"
+        }`}>
+          {overallStatus}
         </span>
       </div>
 

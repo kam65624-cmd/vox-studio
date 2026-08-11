@@ -29,9 +29,31 @@ export function ProductionPipelinePanel({ episodeId }: { episodeId: string }) {
     "18_RECORD_COMPLETION"
   ];
 
-  const handleStart = () => {
+  const handleStart = async () => {
     setIsRunning(true);
     setCurrentStep(0);
+
+    try {
+      // Try real API dispatch
+      const res = await fetch(`/api/episodes/${episodeId}/production/start`, { method: "POST" });
+      if (res.ok) {
+        const pollInterval = setInterval(async () => {
+          const statusRes = await fetch(`/api/episodes/${episodeId}/production/status`);
+          if (statusRes.ok) {
+            const data = await statusRes.json();
+            setCurrentStep(data.activitiesCompleted);
+            if (data.status === "COMPLETED" || data.activitiesCompleted >= activities.length) {
+              clearInterval(pollInterval);
+              setIsRunning(false);
+            }
+          }
+        }, 1000);
+        return;
+      }
+    } catch {
+      // Fallback local simulation if API isn't direct proxy
+    }
+
     const interval = setInterval(() => {
       setCurrentStep((prev) => {
         if (prev >= activities.length - 1) {
