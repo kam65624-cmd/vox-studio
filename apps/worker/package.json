@@ -1,0 +1,25 @@
+{
+  "name": "@vox/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@vox/contracts": "workspace:*",
+    "@vox/domain": "workspace:*",
+    "@vox/ai": "workspace:*",
+    "@vox/media": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@vox/tsconfig": "workspace:*",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2"
+  }
+}
