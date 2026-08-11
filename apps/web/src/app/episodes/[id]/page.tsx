@@ -5,6 +5,8 @@ import { StoryboardPanel } from "@/components/production/StoryboardPanel";
 import { MentorPanel } from "@/components/production/MentorPanel";
 import RefilmQueuePanel from "@/components/production/RefilmQueuePanel";
 import HumanizationInspector from "@/components/production/HumanizationInspector";
+import { ProductionPipelinePanel } from "@/components/production/ProductionPipelinePanel";
+import { QualityGatesPanel } from "@/components/production/QualityGatesPanel";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   Play,
@@ -227,11 +229,18 @@ export default function ProductionWorkspacePage() {
         {/* Right: Mentor + Refilm + Humanization panels */}
         {(activePanel === "mentor" || activePanel === "both") && (
           <div
-            className="w-80 flex-shrink-0 overflow-y-auto flex flex-col gap-0"
+            className="w-[22rem] flex-shrink-0 overflow-y-auto flex flex-col gap-0"
             style={{ background: "var(--ink-navy)" }}
           >
             <MentorPanel />
+            
             <div style={{ padding: "12px 12px 0", flexShrink: 0 }}>
+              <div className="h-64 mb-3">
+                <ProductionPipelinePanel episodeId="1" />
+              </div>
+              <div className="h-64 mb-3">
+                <QualityGatesPanel episodeId="1" />
+              </div>
               <RefilmQueuePanel
                 episodeId="1"
                 sceneIds={MOCK_SCENE_IDS}
