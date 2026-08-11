@@ -88,15 +88,16 @@ export class OpenAICompatibleClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     const url = `${this.baseUrl}/chat/completions`;
-    const payload = {
+    const payload: Record<string, unknown> = {
       model,
       messages: request.messages,
       temperature: request.temperature ?? 0.7,
       top_p: request.top_p ?? 0.95,
       max_tokens: request.max_tokens ?? 8192,
-      stream: false,
-      ...(request.response_format ? { response_format: request.response_format } : {}),
+      stream: request.stream ?? false,
     };
+    if (request.seed !== undefined) payload["seed"] = request.seed;
+    if (request.response_format) payload["response_format"] = request.response_format;
 
     try {
       const response = await fetchFn(url, {

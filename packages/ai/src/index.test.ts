@@ -77,7 +77,7 @@ describe("P0-I 12 Required Test Scenarios", () => {
     const visionModels = registry.getModelsByCapability("VISION");
     expect(visionModels.length).toBeGreaterThan(0);
     expect(visionModels.every((m) => m.capabilities.includes("VISION"))).toBe(true);
-    expect(visionModels.some((m) => m.modelId === "zai/glm-5.2")).toBe(true);
+    expect(visionModels.some((m) => m.modelId === "z-ai/glm-5.2")).toBe(true);
   });
 
   // Scenario 3: Router Selection

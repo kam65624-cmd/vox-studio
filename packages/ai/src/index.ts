@@ -218,9 +218,11 @@ export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
     availability: "ONLINE",
   },
   {
-    modelId: "zai/glm-5.2",
-    providerId: "zai",
-    displayName: "Z.AI GLM-5.2",
+    // Served via NVIDIA NIM — https://integrate.api.nvidia.com/v1
+    // stream=true, seed=42, temperature=1, top_p=1, max_tokens=16384
+    modelId: "z-ai/glm-5.2",
+    providerId: "nvidia",
+    displayName: "Z.AI GLM-5.2 (NVIDIA NIM)",
     version: "5.2.0",
     capabilities: ["TEXT_GENERATION", "REASONING", "STRUCTURED_OUTPUT", "VISION"],
     modalities: { inputs: ["text", "image"], outputs: ["text"] },
@@ -240,9 +242,11 @@ export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
     availability: "ONLINE",
   },
   {
+    // Served via NVIDIA NIM — https://integrate.api.nvidia.com/v1
+    // IMAGE_EDITING + IMAGE_GENERATION via qwen/qwen-image-edit
     modelId: "qwen/qwen-image-edit",
-    providerId: "qwen",
-    displayName: "Qwen Image Edit",
+    providerId: "nvidia",
+    displayName: "Qwen Image Edit (NVIDIA NIM)",
     version: "2.5.0",
     capabilities: ["IMAGE_EDITING", "IMAGE_GENERATION"],
     modalities: { inputs: ["text", "image"], outputs: ["image"] },
@@ -697,9 +701,9 @@ export class ProviderExecutionEngine {
 
       try {
         let rawResult: any;
-        if (job.capability === "TEXT_GENERATION" || job.capability === "REASONING" || job.capability === "STRUCTURED_OUTPUT") {
+        if (job.capability === "TEXT_GENERATION" || job.capability === "REASONING" || job.capability === "STRUCTURED_OUTPUT" || job.capability === "VISION") {
           rawResult = adapter.generateText ? await adapter.generateText({ prompt: job.prompt }) : { text: `[Mock text for ${job.prompt.slice(0, 30)}]` };
-        } else if (job.capability === "IMAGE_GENERATION") {
+        } else if (job.capability === "IMAGE_GENERATION" || job.capability === "IMAGE_EDITING") {
           rawResult = adapter.generateImage ? await adapter.generateImage({ prompt: job.prompt, width: 1920, height: 1080 }) : { imageUrl: "http://localhost:9000/vox/mock.png", mediaKey: "mock-img-key" };
         } else if (job.capability === "VIDEO_GENERATION") {
           rawResult = adapter.generateVideo ? await adapter.generateVideo({ prompt: job.prompt, durationSeconds: 5, aspectRatio: "16:9" }) : { videoUrl: "http://localhost:9000/vox/mock.mp4", mediaKey: "mock-vid-key", durationSeconds: 5 };

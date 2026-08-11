@@ -12,7 +12,7 @@ describe("ModelsController", () => {
     const res = controller.getModels();
     expect(res.models.length).toBeGreaterThan(0);
     expect(res.models.some((m: any) => m.modelId === "meta/muse-glimmer-30b")).toBe(true);
-    expect(res.models.some((m: any) => m.modelId === "zai/glm-5.2")).toBe(true);
+    expect(res.models.some((m: any) => m.modelId === "z-ai/glm-5.2")).toBe(true);
     expect(res.models.some((m: any) => m.modelId === "qwen/qwen-image-edit")).toBe(true);
   });
 

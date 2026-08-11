@@ -23,6 +23,7 @@ export interface ChatCompletionRequest {
   top_p?: number | undefined;
   max_tokens?: number | undefined;
   stream?: boolean | undefined;
+  seed?: number | undefined;
   response_format?: { type: "json_object" | "text" } | Record<string, any> | undefined;
 }
 
