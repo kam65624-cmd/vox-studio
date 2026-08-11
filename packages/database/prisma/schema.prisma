@@ -408,24 +408,36 @@ model TimelineClip {
 // ─── Generation Jobs ──────────────────────────────────────────────────────────
 
 model GenerationJob {
-  id             String    @id @default(uuid())
-  episodeId      String
-  sceneId        String?
-  type           String
-  status         JobStatus @default(PENDING)
-  progress       Int?
-  progressLabel  String?
-  inputJson      Json      @default("{}")
-  resultJson     Json?
-  errorMessage   String?
-  costUsd        Float?
-  temporalRunId  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  idempotencyKey   String?   @unique
+  episodeId        String
+  productionNodeId String?
+  sceneId          String?
+  shotId           String?
+  type             String
+  capability       String?
+  modelId          String?
+  providerId       String?
+  status           JobStatus @default(PENDING)
+  priority         Int       @default(1)
+  retryCount       Int       @default(0)
+  maxRetries       Int       @default(3)
+  progress         Int?
+  progressLabel    String?
+  inputJson        Json      @default("{}")
+  resultJson       Json?
+  errorMessage     String?
+  costUsd          Float?
+  temporalRunId    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   episode      Episode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   scene        Scene?        @relation(fields: [sceneId], references: [id])
   providerRuns ProviderRun[]
+
+  @@index([episodeId])
+  @@index([idempotencyKey])
 }
 
 model ProviderRun {

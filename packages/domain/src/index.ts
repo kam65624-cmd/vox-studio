@@ -27,7 +27,29 @@ import {
   HumanizationPlan,
   HumanizationReport,
   HumanizationType,
+  GenerationJob,
+  GenerationJobStatus,
+  ExecutionPlanNode,
+  ProductionExecutionPlan,
+  CompiledPrompt,
+  ModelCapability,
+  Character,
+  Studio,
+  Wardrobe,
+  Prop,
 } from "@vox/contracts";
+
+/**
+ * Domain Rule: ModelRouterPort
+ * The domain never imports @vox/ai directly.
+ * Callers inject a router conforming to this port.
+ */
+export interface ModelRouterPort {
+  selectModel(request: { capability: ModelCapability; task: string; qualityRequirement?: string }): {
+    selectedModel: { modelId: string };
+    providerId: string;
+  };
+}
 
 /**
  * Domain Rule: Production State Machine Transitions
@@ -1033,6 +1055,251 @@ export class HumanizationDirector {
     return { plan, updatedScenes };
   }
 }
+
+// ─── P0-J Prompt Compiler ──────────────────────────────────────────────────────
+
+export interface PromptCompilerInput {
+  scene?: SceneContract;
+  shot?: ShotNode;
+  creativeDNA?: CreativeDNA;
+  styleSkill?: StyleSkill;
+  character?: Character;
+  studio?: Studio;
+  wardrobe?: Wardrobe;
+  props?: Prop[];
+  continuityConstraints?: string[];
+  negativeRules?: string[];
+}
+
+export class PromptCompiler {
+  static compilePrompt(input: PromptCompilerInput): CompiledPrompt {
+    const parts: string[] = [];
+
+    // 1. Style & Skill Language
+    if (input.creativeDNA?.styleName) {
+      parts.push(`[Style: ${input.creativeDNA.styleName}]`);
+    }
+    if (input.styleSkill?.name) {
+      parts.push(`[Skill: ${input.styleSkill.name}]`);
+    }
+
+    // 2. Character Identity & Wardrobe
+    if (input.character?.identity) {
+      parts.push(`Character: ${input.character.identity}. Personality: ${input.character.personality || "Professional"}.`);
+    }
+    if (input.wardrobe?.name) {
+      parts.push(`Wardrobe: ${input.wardrobe.name}. Palette: ${input.wardrobe.colorPalette?.join(", ") || "Default"}.`);
+    }
+
+    // 3. Studio & Environment
+    if (input.studio?.name) {
+      parts.push(`Studio: ${input.studio.name}. Elements: ${input.studio.elements?.join(", ") || "Studio stage"}.`);
+    }
+
+    // 4. Props
+    if (input.props && input.props.length > 0) {
+      parts.push(`Props: ${input.props.map((p) => p.name).join(", ")}.`);
+    }
+
+    // 5. Scene Script & Visual Intent
+    if (input.scene) {
+      parts.push(`Scene Script: "${input.scene.text}". Visual Intent: ${input.scene.visualIntent}.`);
+    }
+
+    // 6. Camera & Motion Language
+    if (input.shot) {
+      parts.push(`Shot Type: ${input.shot.type}. Camera Motion: ${input.shot.cameraMotion || "Static"}. Action: ${input.shot.action || "Presentation"}.`);
+    } else if (input.creativeDNA?.cameraLanguage) {
+      parts.push(`Camera Language: ${input.creativeDNA.cameraLanguage}.`);
+    }
+
+    // 7. Palette Lock
+    if (input.creativeDNA) {
+      parts.push(`Palette Lock: Primary ${input.creativeDNA.primaryColor}, Accent ${input.creativeDNA.accentColor}.`);
+    }
+
+    // 8. Continuity Constraints
+    if (input.continuityConstraints && input.continuityConstraints.length > 0) {
+      parts.push(`Continuity: ${input.continuityConstraints.join("; ")}.`);
+    }
+
+    const fullPrompt = parts.join(" ");
+
+    // Negative Rules Compilation
+    const negParts: string[] = input.negativeRules || [];
+    if (input.creativeDNA?.negativeRules) {
+      negParts.push(...input.creativeDNA.negativeRules);
+    }
+    const negativePrompt = Array.from(new Set(negParts)).join(", ") || "No photorealism, No 3D renders";
+
+    // Deterministic fingerprint calculation
+    const fingerprint = `prompt-fp-${fullPrompt.length}-${negativePrompt.length}-${input.creativeDNA?.version || 1}`;
+
+    return {
+      prompt: fullPrompt,
+      negativePrompt,
+      fingerprint,
+      creativeDnaVersion: input.creativeDNA?.version || 1,
+      styleSkillVersion: input.styleSkill?.version || "1.0",
+      parameters: {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        aspectRatio: "16:9",
+      },
+    };
+  }
+}
+
+// ─── P0-J Production Execution Planner ────────────────────────────────────────
+
+/** Default router used when no external router is injected. */
+const defaultModelRouter: ModelRouterPort = {
+  selectModel({ capability }: { capability: ModelCapability; task: string }) {
+    const capabilityMap: Record<ModelCapability, string> = {
+      TEXT_GENERATION: "openai:gpt-4o",
+      IMAGE_GENERATION: "openai:dall-e-3",
+      VIDEO_GENERATION: "runway:gen3",
+      VOICE_GENERATION: "elevenlabs:turbo-v2",
+      IMAGE_EDITING: "openai:dall-e-3",
+      MUSIC_GENERATION: "suno:chirp-v3",
+      REASONING: "anthropic:claude-3-5-sonnet",
+    };
+    const modelId = capabilityMap[capability] ?? "openai:gpt-4o";
+    const [providerId, mid] = modelId.split(":");
+    return { selectedModel: { modelId: mid ?? modelId }, providerId: providerId ?? "openai" };
+  },
+};
+
+export function createProductionExecutionPlan(
+  episodeId: string,
+  prodGraph: ProductionGraph,
+  scenes: SceneContract[],
+  creativeDNA?: CreativeDNA,
+  existingArtifactKeys: string[] = [],
+  routerPort: ModelRouterPort = defaultModelRouter
+): ProductionExecutionPlan {
+  const nodes = prodGraph.nodes || [];
+  const existingSet = new Set(existingArtifactKeys);
+
+  let totalDuration = 0;
+  let totalCost = 0;
+  const requiredAssetsSet = new Set<string>();
+  const preservedAssetsSet = new Set<string>();
+
+  const planNodes: ExecutionPlanNode[] = nodes.map((node, index) => {
+    // Map node type to ModelCapability
+    let capability: ModelCapability = "TEXT_GENERATION";
+    if (node.type === "SHOT_GENERATION") {
+      capability = "VIDEO_GENERATION";
+    } else if (node.type === "VOICE_SEGMENT") {
+      capability = "VOICE_GENERATION";
+    } else if (node.type === "CHARACTER_RIG" || node.type === "STUDIO_ENVIRONMENT") {
+      capability = "IMAGE_GENERATION";
+    } else if (node.type === "STYLE_SKILL") {
+      capability = "IMAGE_EDITING";
+    }
+
+    // Model Routing via injected router port
+    const route = routerPort.selectModel({
+      capability,
+      task: `Execute node ${node.id} (${node.type})`,
+      qualityRequirement: "HIGH",
+    });
+
+    const selectedModelId = route.selectedModel.modelId;
+    const selectedProviderId = route.providerId;
+
+    // Idempotency key: episodeId:nodeId:dnaVersion:modelId
+    const idempotencyKey = `idem-${episodeId}-${node.id}-v${creativeDNA?.version || 1}-${selectedModelId}`;
+
+    // Check valid artifact reuse
+    const artifactExists = existingSet.has(idempotencyKey) || existingSet.has(node.id);
+    const action = artifactExists ? "REUSE" : "GENERATE";
+
+    if (action === "REUSE") {
+      preservedAssetsSet.add(node.id);
+    } else {
+      requiredAssetsSet.add(node.id);
+      totalDuration += 5; // default 5s per node
+      totalCost += node.costEstimateUsd || 0.30;
+    }
+
+    const parallelizable = node.dependencies.length === 0;
+
+    return {
+      nodeId: node.id,
+      nodeType: node.type,
+      dependencies: node.dependencies,
+      executionOrder: index + 1,
+      parallelizable,
+      blockingDependencies: node.dependencies.filter((depId) => !existingSet.has(depId)),
+      selectedCapability: capability,
+      selectedModelId,
+      selectedProviderId,
+      estimatedDurationSeconds: action === "REUSE" ? 0 : 5,
+      estimatedCostUsd: action === "REUSE" ? 0 : (node.costEstimateUsd || 0.30),
+      idempotencyKey,
+      action,
+    };
+  });
+
+  return {
+    id: `exec-plan-${Date.now().toString(36)}`,
+    episodeId,
+    nodes: planNodes,
+    totalDurationSeconds: Math.max(10, totalDuration),
+    totalCostUsd: Math.round(totalCost * 100) / 100,
+    isCostEstimated: true,
+    requiredAssets: Array.from(requiredAssetsSet),
+    preservedAssets: Array.from(preservedAssetsSet),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// ─── P0-J Generation Jobs Builder ──────────────────────────────────────────────
+
+export function createGenerationJobsFromPlan(
+  episodeId: string,
+  plan: ProductionExecutionPlan,
+  compiledPromptsMap: Map<string, CompiledPrompt> = new Map()
+): GenerationJob[] {
+  return plan.nodes
+    .filter((n) => n.action === "GENERATE")
+    .map((planNode) => {
+      const compiled = compiledPromptsMap.get(planNode.nodeId) || {
+        prompt: `Execute production node ${planNode.nodeId} (${planNode.nodeType})`,
+        negativePrompt: "No photorealism, No 3D renders",
+        fingerprint: `fp-${planNode.nodeId}`,
+        creativeDnaVersion: 1,
+        styleSkillVersion: "1.0",
+        parameters: {},
+      };
+
+      return {
+        id: `gjob-${planNode.nodeId}-${Date.now().toString(36)}`,
+        idempotencyKey: planNode.idempotencyKey,
+        episodeId,
+        productionNodeId: planNode.nodeId,
+        capability: planNode.selectedCapability,
+        modelId: planNode.selectedModelId,
+        providerId: planNode.selectedProviderId,
+        inputAssets: planNode.dependencies,
+        prompt: compiled.prompt,
+        negativePrompt: compiled.negativePrompt,
+        creativeDnaVersion: compiled.creativeDnaVersion,
+        styleSkillVersion: compiled.styleSkillVersion,
+        generationParameters: compiled.parameters,
+        priority: 1,
+        status: planNode.blockingDependencies.length > 0 ? "BLOCKED" : "QUEUED",
+        retryCount: 0,
+        maxRetries: 3,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+}
+
 
 
 

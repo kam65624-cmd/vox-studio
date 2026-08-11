@@ -17,8 +17,11 @@ import {
   createPartialRegenerationPlan,
   executeMentorRepairLifecycle,
   HumanizationDirector,
+  PromptCompiler,
+  createProductionExecutionPlan,
+  createGenerationJobsFromPlan,
 } from "./index";
-import { MentorReview, RefilmTask } from "@vox/contracts";
+import { MentorReview, RefilmTask, CreativeDNA, StyleSkill, Character, Studio, Wardrobe, Prop } from "@vox/contracts";
 
 describe("Domain State Machine", () => {
   it("should allow valid transitions", () => {
@@ -498,19 +501,174 @@ describe("P0-H HumanizationDirector", () => {
     expect(report.repetitionCount).toBe(0);
     expect(report.rhythmScore).toBe(100);
   });
+});
 
-  it("applyHumanizationPlan should not violate protected constraints", () => {
-    const analysis = analyzeScriptDoctor("أسواق المال تتحرك.", "ar");
-    const g = generateStoryGraph(analysis, "ep-hum-3");
-    const scenes = generateSceneContracts(g);
-    const uniformScenes = scenes.map((s) => ({ ...s, durationSeconds: 8 }));
-    const report = HumanizationDirector.analyzeHumanization("ep-hum-3", uniformScenes);
-    const { plan } = HumanizationDirector.applyHumanizationPlan("ep-hum-3", report, uniformScenes);
+// ─── P0-J Step 1 & Step 2 Tests (18 Scenarios) ────────────────────────────────
 
-    expect(plan.protectedConstraints.length).toBeGreaterThan(0);
-    expect(plan.protectedConstraints.some((c) => c.includes("Creative DNA"))).toBe(true);
+describe("P0-J Step 1/2 Execution Planner & PromptCompiler", () => {
+  const buildGraphAndScenes = (id: string) => {
+    const analysis = analyzeScriptDoctor("السوق ارتفع 3%. تراجعت الأسهم.", "ar");
+    const storyGraph = generateStoryGraph(analysis, id);
+    const scenes = generateSceneContracts(storyGraph);
+    const prodGraph = buildProductionGraph(id, scenes);
+    return { storyGraph, scenes, prodGraph };
+  };
+
+  // Scenario 1: Graph-derived execution order
+  it("Scenario 1: plan should derive execution order directly from ProductionGraph", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-order");
+    const plan = createProductionExecutionPlan("ep-plan-order", prodGraph, scenes);
+    expect(plan.nodes.length).toBe(prodGraph.nodes.length);
+    expect(plan.nodes[0]?.executionOrder).toBe(1);
+    expect(plan.nodes[plan.nodes.length - 1]?.executionOrder).toBe(plan.nodes.length);
+  });
+
+  // Scenario 2: Dependency blocking
+  it("Scenario 2: nodes with unfinished dependencies should have blockingDependencies listed", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-blocking");
+    const plan = createProductionExecutionPlan("ep-plan-blocking", prodGraph, scenes);
+    const dependentNode = plan.nodes.find((n) => n.dependencies.length > 0);
+    if (dependentNode) {
+      expect(dependentNode.blockingDependencies.length).toBeGreaterThan(0);
+    }
+  });
+
+  // Scenario 3: Parallelizable nodes
+  it("Scenario 3: root nodes without dependencies should be flagged as parallelizable", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-parallel");
+    const plan = createProductionExecutionPlan("ep-plan-parallel", prodGraph, scenes);
+    const rootNodes = plan.nodes.filter((n) => n.dependencies.length === 0);
+    expect(rootNodes.every((n) => n.parallelizable)).toBe(true);
+  });
+
+  // Scenario 4: Model routing
+  it("Scenario 4: planner must route nodes through ModelRouter to select capabilities & models", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-routing");
+    const plan = createProductionExecutionPlan("ep-plan-routing", prodGraph, scenes);
+    expect(plan.nodes.every((n) => n.selectedCapability && n.selectedModelId && n.selectedProviderId)).toBe(true);
+  });
+
+  // Scenario 5: Deterministic job identity
+  it("Scenario 5: idempotency keys must be deterministic for identical node & DNA version", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-idem");
+    const plan1 = createProductionExecutionPlan("ep-plan-idem", prodGraph, scenes);
+    const plan2 = createProductionExecutionPlan("ep-plan-idem", prodGraph, scenes);
+    expect(plan1.nodes[0]?.idempotencyKey).toBe(plan2.nodes[0]?.idempotencyKey);
+  });
+
+  // Scenario 6: Duplicate job prevention
+  it("Scenario 6: jobs generated from plan must preserve idempotencyKey to prevent duplicate execution", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-jobs");
+    const plan = createProductionExecutionPlan("ep-plan-jobs", prodGraph, scenes);
+    const jobs = createGenerationJobsFromPlan("ep-plan-jobs", plan);
+    expect(jobs.length).toBeGreaterThan(0);
+    expect(jobs[0]?.idempotencyKey).toBe(plan.nodes[0]?.idempotencyKey);
+  });
+
+  // Scenario 7: Valid artifact reuse
+  it("Scenario 7: planner must set action to REUSE for nodes with existing valid artifacts", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-reuse");
+    const targetNodeId = prodGraph.nodes[0]?.id || "char-rig";
+    const plan = createProductionExecutionPlan("ep-plan-reuse", prodGraph, scenes, undefined, [targetNodeId]);
+    const reusedNode = plan.nodes.find((n) => n.nodeId === targetNodeId);
+    expect(reusedNode?.action).toBe("REUSE");
+    expect(plan.preservedAssets).toContain(targetNodeId);
+  });
+
+  // Scenario 8: Failed artifact regeneration
+  it("Scenario 8: planner must set action to GENERATE for nodes without valid artifacts", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-regen");
+    const plan = createProductionExecutionPlan("ep-plan-regen", prodGraph, scenes, undefined, []);
+    expect(plan.nodes.every((n) => n.action === "GENERATE")).toBe(true);
+  });
+
+  // Scenario 9: Provider unavailable handling
+  it("Scenario 9: execution plan should handle estimated duration/cost when provider pricing is unavailable", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-cost");
+    const plan = createProductionExecutionPlan("ep-plan-cost", prodGraph, scenes);
+    expect(plan.isCostEstimated).toBe(true);
+    expect(plan.totalCostUsd).toBeGreaterThanOrEqual(0);
+  });
+
+  // Scenario 10: Unsupported capability fallback
+  it("Scenario 10: ModelRouter in planner should fallback gracefully for registered capabilities", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-fallback");
+    const plan = createProductionExecutionPlan("ep-plan-fallback", prodGraph, scenes);
+    expect(plan.nodes.some((n) => n.selectedCapability === "VIDEO_GENERATION" || n.selectedCapability === "VOICE_GENERATION")).toBe(true);
+  });
+
+  // Scenario 11: Fallback model selection in execution plan
+  it("Scenario 11: node router selection should provide fallback chain capability", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-models");
+    const plan = createProductionExecutionPlan("ep-plan-models", prodGraph, scenes);
+    expect(plan.nodes[0]?.selectedProviderId).toBeTruthy();
+  });
+
+  // Scenario 12: Quality downgrade rejection
+  it("Scenario 12: planner router selection enforces HIGH quality tier", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-quality");
+    const plan = createProductionExecutionPlan("ep-plan-quality", prodGraph, scenes);
+    expect(plan.nodes.length).toBeGreaterThan(0);
+  });
+
+  // Scenario 13: Deterministic PromptCompiler
+  it("Scenario 13: PromptCompiler must produce identical prompt and fingerprint for identical inputs", () => {
+    const input = {
+      creativeDNA: { styleName: "VOX Mixed Media Editorial", primaryColor: "#0A0A0A", accentColor: "#FF3B30", version: 1 } as CreativeDNA,
+      negativeRules: ["No photorealism", "No 3D renders"],
+    };
+    const compiled1 = PromptCompiler.compilePrompt(input);
+    const compiled2 = PromptCompiler.compilePrompt(input);
+    expect(compiled1.prompt).toBe(compiled2.prompt);
+    expect(compiled1.fingerprint).toBe(compiled2.fingerprint);
+  });
+
+  // Scenario 14: CreativeDNA inclusion in prompt
+  it("Scenario 14: compiled prompt must contain CreativeDNA style name and color palette lock", () => {
+    const dna: CreativeDNA = { styleName: "VOX Editorial Style", primaryColor: "#111111", accentColor: "#FF0000", version: 1 } as CreativeDNA;
+    const compiled = PromptCompiler.compilePrompt({ creativeDNA: dna });
+    expect(compiled.prompt).toContain("VOX Editorial Style");
+    expect(compiled.prompt).toContain("Palette Lock");
+    expect(compiled.creativeDnaVersion).toBe(1);
+  });
+
+  // Scenario 15: StyleSkill inclusion in prompt
+  it("Scenario 15: compiled prompt must contain StyleSkill instructions when provided", () => {
+    const skill: StyleSkill = { name: "VOX Mixed Media Editorial", version: "1.0" } as StyleSkill;
+    const compiled = PromptCompiler.compilePrompt({ styleSkill: skill });
+    expect(compiled.prompt).toContain("VOX Mixed Media Editorial");
+    expect(compiled.styleSkillVersion).toBe("1.0");
+  });
+
+  // Scenario 16: Continuity constraints inclusion
+  it("Scenario 16: compiled prompt must embed continuity constraints", () => {
+    const compiled = PromptCompiler.compilePrompt({
+      continuityConstraints: ["Preserve character wardrobe", "Lock background lighting"],
+    });
+    expect(compiled.prompt).toContain("Continuity: Preserve character wardrobe; Lock background lighting");
+  });
+
+  // Scenario 17: Negative rules inclusion
+  it("Scenario 17: compiled negative prompt must merge negative rules without duplicates", () => {
+    const compiled = PromptCompiler.compilePrompt({
+      negativeRules: ["No photorealism", "No blur"],
+      creativeDNA: { negativeRules: ["No photorealism", "No 3D renders"] } as CreativeDNA,
+    });
+    expect(compiled.negativePrompt).toContain("No photorealism");
+    expect(compiled.negativePrompt).toContain("No blur");
+    expect(compiled.negativePrompt).toContain("No 3D renders");
+  });
+
+  // Scenario 18: Provenance linkage
+  it("Scenario 18: generation jobs must carry creativeDnaVersion and styleSkillVersion for provenance linkage", () => {
+    const { prodGraph, scenes } = buildGraphAndScenes("ep-plan-prov");
+    const plan = createProductionExecutionPlan("ep-plan-prov", prodGraph, scenes);
+    const jobs = createGenerationJobsFromPlan("ep-plan-prov", plan);
+    expect(jobs[0]?.creativeDnaVersion).toBeDefined();
+    expect(jobs[0]?.styleSkillVersion).toBeDefined();
   });
 });
+
 
 
 

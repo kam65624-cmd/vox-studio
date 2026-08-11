@@ -742,6 +742,86 @@ export const GenerationProvenanceSchema = z.object({
   createdAt: z.string(),
 });
 
+// ─── P0-J Generation Job, Execution Planner & Prompt Compiler ─────────────────
+
+export const GenerationJobStatusSchema = z.enum([
+  "QUEUED",
+  "PLANNING",
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "RETRYING",
+  "CANCELLED",
+  "BLOCKED",
+  "REQUIRES_REVIEW",
+  "REUSE",
+]);
+
+export const GenerationJobSchema = z.object({
+  id: IdSchema,
+  idempotencyKey: z.string(),
+  episodeId: IdSchema,
+  productionNodeId: z.string(),
+  sceneId: z.string().optional(),
+  shotId: z.string().optional(),
+  capability: ModelCapabilitySchema,
+  modelId: z.string(),
+  providerId: z.string(),
+  inputAssets: z.array(z.string()).default([]),
+  prompt: z.string(),
+  negativePrompt: z.string().optional(),
+  creativeDnaVersion: z.number().default(1),
+  styleSkillVersion: z.string().default("1.0"),
+  generationParameters: z.record(z.unknown()).default({}),
+  priority: z.number().default(1),
+  status: GenerationJobStatusSchema,
+  retryCount: z.number().default(0),
+  maxRetries: z.number().default(3),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+  error: z.string().optional(),
+  provenance: GenerationProvenanceSchema.optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const ExecutionPlanNodeSchema = z.object({
+  nodeId: z.string(),
+  nodeType: ProductionNodeTypeSchema,
+  dependencies: z.array(z.string()),
+  executionOrder: z.number(),
+  parallelizable: z.boolean(),
+  blockingDependencies: z.array(z.string()),
+  selectedCapability: ModelCapabilitySchema,
+  selectedModelId: z.string(),
+  selectedProviderId: z.string(),
+  estimatedDurationSeconds: z.number(),
+  estimatedCostUsd: z.number(),
+  idempotencyKey: z.string(),
+  action: z.enum(["GENERATE", "REUSE", "SKIP"]),
+});
+
+export const ProductionExecutionPlanSchema = z.object({
+  id: IdSchema,
+  episodeId: IdSchema,
+  nodes: z.array(ExecutionPlanNodeSchema),
+  totalDurationSeconds: z.number(),
+  totalCostUsd: z.number(),
+  isCostEstimated: z.boolean(),
+  requiredAssets: z.array(z.string()),
+  preservedAssets: z.array(z.string()),
+  createdAt: z.string(),
+});
+
+export const CompiledPromptSchema = z.object({
+  prompt: z.string(),
+  negativePrompt: z.string(),
+  fingerprint: z.string(),
+  creativeDnaVersion: z.number(),
+  styleSkillVersion: z.string(),
+  parameters: z.record(z.unknown()),
+});
+
 // ─── Export types ─────────────────────────────────────────────────────────────
 
 export type EpisodeStatus = z.infer<typeof EpisodeStatusSchema>;
@@ -798,6 +878,12 @@ export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
 export type RouterSelectionRequest = z.infer<typeof RouterSelectionRequestSchema>;
 export type RouterSelectionResponse = z.infer<typeof RouterSelectionResponseSchema>;
 export type GenerationProvenance = z.infer<typeof GenerationProvenanceSchema>;
+export type GenerationJobStatus = z.infer<typeof GenerationJobStatusSchema>;
+export type GenerationJob = z.infer<typeof GenerationJobSchema>;
+export type ExecutionPlanNode = z.infer<typeof ExecutionPlanNodeSchema>;
+export type ProductionExecutionPlan = z.infer<typeof ProductionExecutionPlanSchema>;
+export type CompiledPrompt = z.infer<typeof CompiledPromptSchema>;
+
 
 
 
