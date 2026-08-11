@@ -1,22 +1,18 @@
-import { MockTextModelProvider, MockVideoModelProvider, MockVoiceModelProvider } from "@vox/ai";
-import { validateProbeResult } from "@vox/media";
-import { canTransition } from "@vox/domain";
+import { EpisodeProductionWorkflow } from "./workflow";
 
 async function runWorker() {
   console.log("⚡ VOX Studio Production Worker starting...");
   console.log("✓ Registered Workflows:");
-  console.log("  - episodeProductionWorkflow");
+  console.log("  - EpisodeProductionWorkflow (18 activities)");
   console.log("  - scriptAnalysisWorkflow");
   console.log("  - sceneGenerationWorkflow");
   console.log("  - mentorReviewWorkflow");
-  console.log("  - renderWorkflow");
+  console.log("  - renderWorkflow\n");
 
-  // Verify mock provider wiring
-  const textProvider = new MockTextModelProvider();
-  const res = await textProvider.generateText({ prompt: "Script Doctor check" });
-  console.log("✓ AI Provider Adapter connected:", textProvider.name);
-
-  console.log("✅ Worker initialized successfully in poll mode.");
+  console.log("✅ Worker initialized in poll mode — awaiting jobs.");
 }
 
 runWorker().catch(console.error);
+
+export { EpisodeProductionWorkflow };
+export type { WorkflowContext, WorkflowRunResult } from "./workflow";
