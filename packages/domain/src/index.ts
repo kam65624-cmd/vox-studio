@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   SceneContract,
   MentorReview,
@@ -1156,8 +1157,9 @@ export class PromptCompiler {
     }
     const negativePrompt = Array.from(new Set(negParts)).join(", ") || "No photorealism, No 3D renders";
 
-    // Deterministic fingerprint calculation
-    const fingerprint = `prompt-fp-${fullPrompt.length}-${negativePrompt.length}-${input.creativeDNA?.version || 1}`;
+    // Deterministic SHA-256 fingerprint calculation
+    const rawFingerprintInput = `${fullPrompt}|${negativePrompt}|v${input.creativeDNA?.version || 1}|s${input.styleSkill?.id || "1.0"}`;
+    const fingerprint = createHash("sha256").update(rawFingerprintInput).digest("hex");
 
     return {
       prompt: fullPrompt,
