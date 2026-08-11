@@ -491,3 +491,227 @@ export function createGenerationProvenance(input: {
     createdAt: new Date().toISOString(),
   };
 }
+
+// ─── P0-K Provider Error Classification & Smart Retry Engine ────────────────
+
+export type ProviderErrorCode =
+  | "PROVIDER_NOT_CONFIGURED"
+  | "AUTH_ERROR"
+  | "RATE_LIMIT"
+  | "TIMEOUT"
+  | "NETWORK_ERROR"
+  | "INVALID_REQUEST"
+  | "UNSUPPORTED_CAPABILITY"
+  | "INVALID_ARTIFACT"
+  | "PROVIDER_ERROR"
+  | "UNKNOWN_ERROR";
+
+export class ProviderExecutionError extends Error {
+  constructor(
+    public readonly code: ProviderErrorCode,
+    message: string,
+    public readonly providerId?: string,
+    public readonly modelId?: string,
+    public readonly isTransient: boolean = false
+  ) {
+    super(`[${code}] ${message}`);
+    this.name = "ProviderExecutionError";
+  }
+}
+
+export function classifyError(err: unknown): { code: ProviderErrorCode; isTransient: boolean } {
+  if (err instanceof ProviderExecutionError) {
+    return { code: err.code, isTransient: err.isTransient };
+  }
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (msg.includes("rate limit") || msg.includes("429") || msg.includes("too many requests")) {
+    return { code: "RATE_LIMIT", isTransient: true };
+  }
+  if (msg.includes("timeout") || msg.includes("etimedout")) {
+    return { code: "TIMEOUT", isTransient: true };
+  }
+  if (msg.includes("network") || msg.includes("econnreset") || msg.includes("fetch failed")) {
+    return { code: "NETWORK_ERROR", isTransient: true };
+  }
+  if (msg.includes("unauthorized") || msg.includes("api key") || msg.includes("401") || msg.includes("403")) {
+    return { code: "AUTH_ERROR", isTransient: false };
+  }
+  if (msg.includes("invalid request") || msg.includes("bad request") || msg.includes("400")) {
+    return { code: "INVALID_REQUEST", isTransient: false };
+  }
+  if (msg.includes("not configured") || msg.includes("missing key")) {
+    return { code: "PROVIDER_NOT_CONFIGURED", isTransient: false };
+  }
+  if (msg.includes("unsupported capability") || msg.includes("capability not supported")) {
+    return { code: "UNSUPPORTED_CAPABILITY", isTransient: false };
+  }
+  if (msg.includes("invalid artifact") || msg.includes("corrupt")) {
+    return { code: "INVALID_ARTIFACT", isTransient: false };
+  }
+  return { code: "PROVIDER_ERROR", isTransient: false };
+}
+
+export interface ProviderExecutionResult<T = any> {
+  success: boolean;
+  result?: T;
+  provenance?: GenerationProvenance;
+  error?: ProviderExecutionError;
+  attempts: number;
+  selectedModelId: string;
+  selectedProviderId: string;
+}
+
+export class ProviderExecutionEngine {
+  private adapters = new Map<string, UnifiedProviderAdapter>();
+
+  constructor(
+    private registry: ModelRegistry = new ModelRegistry(),
+    private router: ModelRouter = new ModelRouter(registry)
+  ) {
+    // Register default unified mock adapter
+    const mockAdapter = new UnifiedMockAdapter();
+    this.adapters.set(mockAdapter.providerId, mockAdapter);
+    this.adapters.set("vox-mock", mockAdapter);
+    this.adapters.set("openai", mockAdapter);
+    this.adapters.set("anthropic", mockAdapter);
+    this.adapters.set("elevenlabs", mockAdapter);
+    this.adapters.set("runway", mockAdapter);
+  }
+
+  registerAdapter(adapter: UnifiedProviderAdapter): void {
+    this.adapters.set(adapter.providerId, adapter);
+  }
+
+  async executeJob(job: {
+    capability: any;
+    prompt: string;
+    episodeId?: string;
+    sceneId?: string;
+    shotId?: string;
+    productionNodeId?: string;
+    creativeDnaVersion?: number;
+    styleSkillVersion?: string;
+    maxRetries?: number;
+  }): Promise<ProviderExecutionResult> {
+    const route = this.router.selectModel({
+      capability: job.capability,
+      task: `Execute job for capability ${job.capability}`,
+      qualityRequirement: "HIGH",
+    });
+
+    let currentModel = route.selectedModel;
+    let currentProviderId = route.providerId;
+    const maxRetries = job.maxRetries ?? 3;
+    let attempts = 0;
+    let lastError: ProviderExecutionError | undefined;
+
+    while (attempts < maxRetries) {
+      attempts++;
+      const adapter = this.adapters.get(currentProviderId) || this.adapters.get("vox-mock-provider");
+      if (!adapter) {
+        lastError = new ProviderExecutionError(
+          "PROVIDER_NOT_CONFIGURED",
+          `No adapter registered for provider ${currentProviderId}`,
+          currentProviderId,
+          currentModel.modelId,
+          false
+        );
+        break;
+      }
+
+      try {
+        let rawResult: any;
+        if (job.capability === "TEXT_GENERATION" || job.capability === "REASONING" || job.capability === "STRUCTURED_OUTPUT") {
+          rawResult = adapter.generateText ? await adapter.generateText({ prompt: job.prompt }) : { text: `[Mock text for ${job.prompt.slice(0, 30)}]` };
+        } else if (job.capability === "IMAGE_GENERATION") {
+          rawResult = adapter.generateImage ? await adapter.generateImage({ prompt: job.prompt, width: 1920, height: 1080 }) : { imageUrl: "http://localhost:9000/vox/mock.png", mediaKey: "mock-img-key" };
+        } else if (job.capability === "VIDEO_GENERATION") {
+          rawResult = adapter.generateVideo ? await adapter.generateVideo({ prompt: job.prompt, durationSeconds: 5, aspectRatio: "16:9" }) : { videoUrl: "http://localhost:9000/vox/mock.mp4", mediaKey: "mock-vid-key", durationSeconds: 5 };
+        } else if (job.capability === "VOICE_GENERATION") {
+          rawResult = adapter.generateVoice ? await adapter.generateVoice({ text: job.prompt, voiceId: "mock-voice", language: "ar" }) : { audioUrl: "http://localhost:9000/vox/mock.mp3", mediaKey: "mock-aud-key", durationSeconds: 5 };
+        } else {
+          rawResult = { output: `[Generated for capability ${job.capability}]` };
+        }
+
+        const provenanceInput: any = {
+          providerId: currentProviderId,
+          modelId: currentModel.modelId,
+          modelVersion: currentModel.version,
+          generationRequestId: `req-${Date.now().toString(36)}`,
+        };
+        if (job.creativeDnaVersion !== undefined) provenanceInput.creativeDnaVersion = job.creativeDnaVersion;
+        if (job.styleSkillVersion !== undefined) provenanceInput.styleSkillVersion = job.styleSkillVersion;
+        if (job.episodeId !== undefined) provenanceInput.episodeId = job.episodeId;
+        if (job.sceneId !== undefined) provenanceInput.sceneId = job.sceneId;
+        if (job.shotId !== undefined) provenanceInput.shotId = job.shotId;
+        if (job.productionNodeId !== undefined) provenanceInput.productionNodeId = job.productionNodeId;
+
+        const provenance = createGenerationProvenance(provenanceInput);
+
+        return {
+          success: true,
+          result: rawResult,
+          provenance,
+          attempts,
+          selectedModelId: currentModel.modelId,
+          selectedProviderId: currentProviderId,
+        };
+      } catch (err: unknown) {
+        const { code, isTransient } = classifyError(err);
+        lastError = new ProviderExecutionError(
+          code,
+          err instanceof Error ? err.message : String(err),
+          currentProviderId,
+          currentModel.modelId,
+          isTransient
+        );
+
+        if (!isTransient) {
+          // Non-transient error -> check fallback chain
+          if (route.fallbackChain && route.fallbackChain.length > 0) {
+            const fallbackModelId = route.fallbackChain.shift();
+            if (fallbackModelId && fallbackModelId !== "PRIMARY -> FALLBACK 1 -> ESCALATE") {
+              const fallbackModel = this.registry.getModel(fallbackModelId);
+              if (fallbackModel) {
+                currentModel = fallbackModel;
+                currentProviderId = fallbackModel.providerId;
+                continue;
+              }
+            }
+          }
+          break; // No fallbacks left
+        }
+      }
+    }
+
+    return {
+      success: false,
+      error: lastError || new ProviderExecutionError("UNKNOWN_ERROR", "Execution failed after maximum retries", currentProviderId, currentModel.modelId, false),
+      attempts,
+      selectedModelId: currentModel.modelId,
+      selectedProviderId: currentProviderId,
+    };
+  }
+}
+
+// ─── P0-K Mock Renderer (Strictly Separate from Real Media Engine) ──────────
+
+export class MockProductionRenderer {
+  public readonly mode = "MOCK";
+
+  async renderMockVideo(nodeId: string, durationSeconds = 5): Promise<{ videoUrl: string; checksum: string; durationSeconds: number }> {
+    return {
+      videoUrl: `http://localhost:9000/vox-studio/mock-render-${nodeId}.mp4`,
+      checksum: `sha256-mock-${nodeId}-${Date.now()}`,
+      durationSeconds,
+    };
+  }
+
+  async renderMockAudio(nodeId: string, durationSeconds = 5): Promise<{ audioUrl: string; checksum: string; durationSeconds: number }> {
+    return {
+      audioUrl: `http://localhost:9000/vox-studio/mock-audio-${nodeId}.mp3`,
+      checksum: `sha256-mock-audio-${nodeId}-${Date.now()}`,
+      durationSeconds,
+    };
+  }
+}
