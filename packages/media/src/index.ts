@@ -850,3 +850,17 @@ export class ThumbnailEngine {
     };
   }
 }
+
+// ─── M4: S3/MinIO Storage Adapter & Factory ───────────────────────────────────
+export {
+  MinIOStorageAdapter,
+  getS3ConfigFromEnv,
+  type S3StorageConfig,
+} from "./storage-s3";
+
+export {
+  createStorageAdapter,
+  getDefaultStorageAdapter,
+  type StorageBackend,
+  type StorageFactoryConfig,
+} from "./storage-factory";

@@ -242,11 +242,13 @@ export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
     availability: "ONLINE",
   },
   {
-    // Served via NVIDIA NIM — https://integrate.api.nvidia.com/v1
-    // IMAGE_EDITING + IMAGE_GENERATION via qwen/qwen-image-edit
+    // qwen/qwen-image-edit runs via self-hosted NVIDIA NIM container only.
+    // It is NOT available as a hosted API on integrate.api.nvidia.com.
+    // Endpoint: POST /v1/images/edits on your own NIM container.
+    // Do NOT route hosted jobs to this model — use availability: "SELF_HOSTED".
     modelId: "qwen/qwen-image-edit",
     providerId: "nvidia",
-    displayName: "Qwen Image Edit (NVIDIA NIM)",
+    displayName: "Qwen Image Edit (NVIDIA NIM — Self-Hosted)",
     version: "2.5.0",
     capabilities: ["IMAGE_EDITING", "IMAGE_GENERATION"],
     modalities: { inputs: ["text", "image"], outputs: ["image"] },
@@ -263,7 +265,7 @@ export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
     supportsImageEditing: true,
     supportsVideo: false,
     supportsAudio: false,
-    availability: "ONLINE",
+    availability: "SELF_HOSTED",
   },
   {
     modelId: "openai/gpt-4o",
@@ -363,6 +365,74 @@ export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
     supportsImageEditing: true,
     supportsVideo: true,
     supportsAudio: true,
+    availability: "ONLINE",
+  },
+
+  // ─── ElevenLabs Voice Models (M5) ────────────────────────────────────────
+  {
+    modelId:     "eleven_multilingual_v2",
+    providerId:  "elevenlabs",
+    displayName: "ElevenLabs Multilingual v2",
+    version:     "2.0.0",
+    capabilities: ["VOICE_GENERATION"],
+    modalities: { inputs: ["text"], outputs: ["audio"] },
+    languages:   ["ar", "en"],
+    maxInput:    5000,
+    maxOutput:   1,
+    qualityTier: "HIGH",
+    speedTier:   "BALANCED",
+    costTier:    "MEDIUM",
+    supportsStreaming:        true,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  false,
+    supportsImageEditing:    false,
+    supportsVideo:           false,
+    supportsAudio:           true,
+    availability: "ONLINE",
+  },
+  {
+    modelId:     "eleven_turbo_v2_5",
+    providerId:  "elevenlabs",
+    displayName: "ElevenLabs Turbo v2.5",
+    version:     "2.5.0",
+    capabilities: ["VOICE_GENERATION"],
+    modalities: { inputs: ["text"], outputs: ["audio"] },
+    languages:   ["ar", "en"],
+    maxInput:    5000,
+    maxOutput:   1,
+    qualityTier: "STANDARD",
+    speedTier:   "FAST",
+    costTier:    "LOW",
+    supportsStreaming:        true,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  false,
+    supportsImageEditing:    false,
+    supportsVideo:           false,
+    supportsAudio:           true,
+    availability: "ONLINE",
+  },
+  {
+    modelId:     "eleven_flash_v2_5",
+    providerId:  "elevenlabs",
+    displayName: "ElevenLabs Flash v2.5",
+    version:     "2.5.0",
+    capabilities: ["VOICE_GENERATION"],
+    modalities: { inputs: ["text"], outputs: ["audio"] },
+    languages:   ["ar", "en"],
+    maxInput:    5000,
+    maxOutput:   1,
+    qualityTier: "STANDARD",
+    speedTier:   "FAST",
+    costTier:    "LOW",
+    supportsStreaming:        true,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  false,
+    supportsImageEditing:    false,
+    supportsVideo:           false,
+    supportsAudio:           true,
     availability: "ONLINE",
   },
 ];
@@ -795,3 +865,16 @@ export class MockProductionRenderer {
     };
   }
 }
+
+// ─── M5: ElevenLabs Voice Provider ───────────────────────────────────────────
+export { ElevenLabsAdapter, type ElevenLabsVoiceRequest, type ElevenLabsVoiceResponse }
+  from "./providers/elevenlabs/adapter";
+export { ElevenLabsClient, type TTSRequest, type TTSResponse }
+  from "./providers/elevenlabs/client";
+export {
+  getElevenLabsConfig,
+  ELEVENLABS_MODELS,
+  type ElevenLabsConfig,
+  type ElevenLabsModelId,
+  type ElevenLabsVoiceSettings,
+} from "./providers/elevenlabs/config";

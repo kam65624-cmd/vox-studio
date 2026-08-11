@@ -9,13 +9,21 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "temporal:worker": "tsx src/temporal/worker.ts",
+    "temporal:up": "docker compose -f ../../docker/temporal/docker-compose.temporal.yml up -d",
+    "temporal:down": "docker compose -f ../../docker/temporal/docker-compose.temporal.yml down",
+    "temporal:logs": "docker compose -f ../../docker/temporal/docker-compose.temporal.yml logs -f temporal"
   },
   "dependencies": {
     "@vox/contracts": "workspace:*",
     "@vox/domain": "workspace:*",
     "@vox/ai": "workspace:*",
-    "@vox/media": "workspace:*"
+    "@vox/media": "workspace:*",
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/workflow": "^1.11.0",
+    "@temporalio/worker": "^1.11.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

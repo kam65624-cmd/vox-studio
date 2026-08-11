@@ -735,7 +735,7 @@ export const ModelDefinitionSchema = z.object({
   supportsImageEditing: z.boolean(),
   supportsVideo: z.boolean(),
   supportsAudio: z.boolean(),
-  availability: z.enum(["ONLINE", "OFFLINE", "DEPRECATED", "EXPERIMENTAL"]),
+  availability: z.enum(["ONLINE", "OFFLINE", "DEPRECATED", "EXPERIMENTAL", "SELF_HOSTED"]),
   configurationSchema: z.record(z.unknown()).optional(),
 });
 

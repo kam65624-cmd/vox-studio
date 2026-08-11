@@ -230,28 +230,27 @@ describe("P0-L NVIDIA Provider & OpenAI-Compatible Core Integration", () => {
     expect(route.providerId).toBe("nvidia");
   });
 
-  // 15. Router selects nvidia for IMAGE_EDITING
-  it("15. ModelRouter selects nvidia (qwen/qwen-image-edit) for IMAGE_EDITING capability", () => {
+  // 15. Router skips SELF_HOSTED models for standard online IMAGE_EDITING requests
+  it("15. ModelRouter skips SELF_HOSTED qwen/qwen-image-edit for standard online IMAGE_EDITING requests", () => {
     const registry = new ModelRegistry(INITIAL_MODEL_REGISTRY);
     const router = new ModelRouter(registry);
     const route = router.selectModel({
       capability: "IMAGE_EDITING",
       task: "Edit background of character image",
     });
-    expect(route.selectedModel.modelId).toBe("qwen/qwen-image-edit");
-    expect(route.providerId).toBe("nvidia");
+    // SELF_HOSTED model is skipped for ONLINE routing, falling back to mock or online model
+    expect(route.selectedModel.modelId).not.toBe("qwen/qwen-image-edit");
   });
 
-  // 16. Router selects nvidia for IMAGE_GENERATION
-  it("16. ModelRouter selects nvidia (qwen/qwen-image-edit) for IMAGE_GENERATION capability", () => {
+  // 16. Router skips SELF_HOSTED models for standard online IMAGE_GENERATION requests
+  it("16. ModelRouter skips SELF_HOSTED qwen/qwen-image-edit for standard online IMAGE_GENERATION requests", () => {
     const registry = new ModelRegistry(INITIAL_MODEL_REGISTRY);
     const router = new ModelRouter(registry);
     const route = router.selectModel({
       capability: "IMAGE_GENERATION",
       task: "Generate character visual",
     });
-    expect(route.selectedModel.modelId).toBe("qwen/qwen-image-edit");
-    expect(route.providerId).toBe("nvidia");
+    expect(route.selectedModel.modelId).not.toBe("qwen/qwen-image-edit");
   });
 
   // 17. generateImage dispatched to NVIDIAAdapter
