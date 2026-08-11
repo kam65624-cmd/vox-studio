@@ -266,6 +266,7 @@ export const CharacterSchema = z.object({
   description: z.string(),
   personality: z.string(),
   identity: z.string(),
+  visualPrompt: z.string().optional(),
   expressions: z.array(z.string()),
   gestures: z.array(z.string()),
   allowedStyleIds: z.array(z.string()),
@@ -426,21 +427,27 @@ export const EntityGraphSchema = z.object({
 
 export const CreativeDNASchema = z.object({
   id: IdSchema,
-  projectId: IdSchema,
-  styleName: z.string(),
-  primaryColor: z.string(),
-  secondaryColor: z.string(),
-  accentColor: z.string(),
-  fontFamily: z.string(),
-  composition: z.string(),
-  cameraLanguage: z.string(),
-  motionLanguage: z.string(),
-  transitionLanguage: z.string(),
-  negativeRules: z.array(z.string()),
-  brandRules: z.array(z.string()),
+  projectId: IdSchema.optional(),
+  styleName: z.string().optional(),
+  primaryColor: z.string().optional(),
+  secondaryColor: z.string().optional(),
+  accentColor: z.string().optional(),
+  fontFamily: z.string().optional(),
+  composition: z.string().optional(),
+  cameraLanguage: z.string().optional(),
+  motionLanguage: z.string().optional(),
+  transitionLanguage: z.string().optional(),
+  negativeRules: z.array(z.string()).optional(),
+  forbiddenPatterns: z.array(z.string()).optional(),
+  mandatoryElements: z.array(z.string()).optional(),
+  colorPalette: z.array(z.string()).optional(),
+  typography: z.string().optional(),
+  pacingRule: z.string().optional(),
+  motionStyle: z.string().optional(),
+  brandRules: z.array(z.string()).optional(),
   version: z.number().default(1),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 
 export const StyleSkillSchema = z.object({
@@ -448,22 +455,27 @@ export const StyleSkillSchema = z.object({
   name: z.string(),
   slug: z.string(),
   description: z.string(),
+  version: z.string().optional(),
   visualGrammar: z.string(),
   colorSystem: z.object({
     primary: z.string(),
     accent: z.string(),
-    background: z.string(),
+    background: z.string().optional(),
+    secondary: z.string().optional(),
   }),
   composition: z.string(),
   camera: z.string(),
   motion: z.string(),
   transitions: z.string(),
-  typography: z.string(),
+  typography: z.string().optional(),
   texture: z.string(),
   props: z.array(z.string()),
   negativeRules: z.array(z.string()),
   promptGrammar: z.string(),
   qualityRules: z.array(z.string()),
+  cameraLanguage: z.string().optional(),
+  lightingLanguage: z.string().optional(),
+  motionLanguage: z.string().optional(),
 });
 
 // ─── P0-E Shot Graph & Production Graph ───────────────────────────────────────
@@ -908,12 +920,69 @@ export const AssemblyManifestSchema = z.object({
 });
 
 export const CompiledPromptSchema = z.object({
-  prompt: z.string(),
+  // Core generation fields
+  instruction: z.string(),
+  visualPrompt: z.string(),
+  motionPrompt: z.string().optional(),
   negativePrompt: z.string(),
-  fingerprint: z.string(),
-  creativeDnaVersion: z.number(),
-  styleSkillVersion: z.string(),
+  styleConstraints: z.array(z.string()),
+  continuityConstraints: z.array(z.string()),
+  // Parameters for provider
   parameters: z.record(z.unknown()),
+  // Metadata
+  metadata: z.object({
+    language: z.string(),
+    aspectRatio: z.string(),
+    sceneId: z.string().optional(),
+    shotId: z.string().optional(),
+    characterId: z.string().optional(),
+    studioId: z.string().optional(),
+    styleId: z.string().optional(),
+    creativeDnaVersion: z.number(),
+    styleSkillVersion: z.string(),
+    compiledAt: z.string(),
+  }),
+  // Deterministic fingerprint (SHA-256 over canonicalized inputs)
+  fingerprint: z.string(),
+  // Legacy compat fields
+  prompt: z.string(),
+});
+
+// ─── P0-K.1 GAP-3: Retry Classification Contract ─────────────────────────────
+
+export const RetryClassificationSchema = z.enum([
+  "TRANSIENT",            // Temporary network/infra issue → retry with backoff
+  "RATE_LIMIT",           // Provider rate limited → exponential backoff + retry
+  "PROVIDER_UNAVAILABLE", // Provider down → fallback to next model/provider
+  "AUTH_ERROR",           // Credential/API key problem → fail fast
+  "INVALID_REQUEST",      // Bad prompt/params → fail fast (do not retry as-is)
+  "CONTENT_POLICY",       // Content safety refusal → repair prompt or escalate
+  "INVALID_ARTIFACT",     // Generated output failed validation → regenerate
+  "QUALITY_FAILURE",      // Output below quality threshold → mentor/repair path
+  "PERMANENT",            // Non-recoverable error → escalate
+  "UNKNOWN",              // Unclassified → conservative retry with max attempts
+]);
+
+export const RetryPolicySchema = z.object({
+  classification: RetryClassificationSchema,
+  maxAttempts: z.number(),
+  backoffMs: z.number(),     // Initial backoff in ms
+  backoffMultiplier: z.number(),
+  shouldFallback: z.boolean(), // Try next provider/model
+  shouldRepairPrompt: z.boolean(),
+  shouldEscalate: z.boolean(),
+  failFast: z.boolean(),
+});
+
+export const ProviderErrorSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  providerId: z.string(),
+  modelId: z.string(),
+  retryable: z.boolean(),
+  classification: RetryClassificationSchema,
+  httpStatus: z.number().optional(),
+  rawError: z.string().optional(),
 });
 
 // ─── Export types ─────────────────────────────────────────────────────────────
@@ -982,9 +1051,8 @@ export type ProductionAssetStatus = z.infer<typeof ProductionAssetStatusSchema>;
 export type ProductionAsset = z.infer<typeof ProductionAssetSchema>;
 export type ProductionRun = z.infer<typeof ProductionRunSchema>;
 export type AssemblyManifest = z.infer<typeof AssemblyManifestSchema>;
-
-
-
-
+export type RetryClassification = z.infer<typeof RetryClassificationSchema>;
+export type RetryPolicy = z.infer<typeof RetryPolicySchema>;
+export type ProviderError = z.infer<typeof ProviderErrorSchema>;
 
 

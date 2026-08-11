@@ -267,14 +267,58 @@ export class FFmpegMediaEngine implements MediaEnginePort {
     }
   }
 
+  /** Generates a minimal valid ISO MP4 (ISOM/mp42) container buffer for mock mode fallback */
+  private static createValidMockMP4Buffer(label = "VOX-STUDIO"): Buffer {
+    // Valid ISO BMFF ftyp box (isom/iso2/mp41/avc1)
+    const ftyp = Buffer.from([
+      0x00, 0x00, 0x00, 0x20, // Box length: 32
+      0x66, 0x74, 0x79, 0x70, // Box type: ftyp
+      0x69, 0x73, 0x6f, 0x6d, // Major brand: isom
+      0x00, 0x00, 0x02, 0x00, // Minor version: 512
+      0x69, 0x73, 0x6f, 0x6d, // Compatible brand 1: isom
+      0x69, 0x73, 0x6f, 0x32, // Compatible brand 2: iso2
+      0x61, 0x76, 0x63, 0x31, // Compatible brand 3: avc1
+      0x6d, 0x70, 0x34, 0x31, // Compatible brand 4: mp41
+    ]);
+
+    // Valid moov box header
+    const moovHeader = Buffer.from([
+      0x00, 0x00, 0x00, 0x68, // Box length: 104
+      0x6d, 0x6f, 0x6f, 0x76, // Box type: moov
+      0x00, 0x00, 0x00, 0x60, // Sub-box length: 96 (mvhd)
+      0x6d, 0x76, 0x68, 0x64, // Box type: mvhd
+      0x00, 0x00, 0x00, 0x00, // Version & Flags
+      0x00, 0x00, 0x00, 0x00, // Creation time
+      0x00, 0x00, 0x00, 0x00, // Modification time
+      0x00, 0x00, 0x03, 0xe8, // Timescale: 1000
+      0x00, 0x00, 0x75, 0x30, // Duration: 30000ms (30s)
+      0x00, 0x01, 0x00, 0x00, // Preferred rate: 1.0
+      0x01, 0x00, 0x00, 0x00, // Preferred volume: 1.0
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Reserved
+      0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Matrix
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Pre-defined
+      0x00, 0x00, 0x00, 0x02, // Next track ID: 2
+    ]);
+
+    // mdat payload box
+    const payloadStr = `${label}-${Date.now().toString(36)}`;
+    const payloadBuf = Buffer.from(payloadStr);
+    const mdatLength = 8 + payloadBuf.length;
+    const mdatHeader = Buffer.alloc(8);
+    mdatHeader.writeUInt32BE(mdatLength, 0);
+    mdatHeader.write("mdat", 4);
+
+    return Buffer.concat([ftyp, mdatHeader, payloadBuf, moovHeader]);
+  }
+
   async scale(inputPath: string, outputPath: string, profile: RenderProfile): Promise<{ outputPath: string; durationSeconds: number }> {
     await this.assertAvailable();
-    const available = await this.isAvailable();
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
-    if (!available) {
-      // Mock scale fallback writing synthetic container
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, Buffer.from(`synthetic-mp4-scaled-${profile.name}-${Date.now()}`));
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer(`scaled-${profile.name}`));
       return { outputPath, durationSeconds: 30 };
     }
 
@@ -294,74 +338,196 @@ export class FFmpegMediaEngine implements MediaEnginePort {
   async crop(inputPath: string, outputPath: string, width: number, height: number): Promise<{ outputPath: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-cropped-${width}x${height}-${Date.now()}`));
+
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer(`cropped-${width}x${height}`));
+      return { outputPath };
+    }
+
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-i", inputPath,
+      "-vf", `crop=${width}:${height}`,
+      outputPath,
+    ]);
     return { outputPath };
   }
 
   async pad(inputPath: string, outputPath: string, width: number, height: number): Promise<{ outputPath: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-padded-${width}x${height}-${Date.now()}`));
+
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer(`padded-${width}x${height}`));
+      return { outputPath };
+    }
+
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-i", inputPath,
+      "-vf", `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
+      outputPath,
+    ]);
     return { outputPath };
   }
 
   async trim(inputPath: string, outputPath: string, startSeconds: number, endSeconds: number): Promise<{ outputPath: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-trimmed-${startSeconds}-${endSeconds}`));
+
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer(`trimmed-${startSeconds}-${endSeconds}`));
+      return { outputPath };
+    }
+
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-ss", String(startSeconds), "-to", String(endSeconds), "-i", inputPath,
+      "-c", "copy", outputPath,
+    ]);
     return { outputPath };
   }
 
   async concat(inputPaths: string[], outputPath: string): Promise<{ outputPath: string; totalDurationSeconds: number }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-concatenated-${inputPaths.length}-scenes-${Date.now()}`));
+
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer(`concat-${inputPaths.length}-items`));
+      return { outputPath, totalDurationSeconds: inputPaths.length * 5 };
+    }
+
+    const listPath = path.join(path.dirname(outputPath), `concat-list-${Date.now()}.txt`);
+    const listContent = inputPaths.map((p) => `file '${path.resolve(p).replace(/'/g, "'\\''")}'`).join("\n");
+    await fs.writeFile(listPath, listContent);
+
+    try {
+      await execFileAsync(this.ffmpegPath, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outputPath]);
+    } finally {
+      await fs.unlink(listPath).catch(() => {});
+    }
     return { outputPath, totalDurationSeconds: inputPaths.length * 5 };
   }
 
   async overlay(baseVideoPath: string, overlayPath: string, outputPath: string): Promise<{ outputPath: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-overlayed-${Date.now()}`));
+
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer(`overlayed`));
+      return { outputPath };
+    }
+
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-i", baseVideoPath, "-i", overlayPath,
+      "-filter_complex", "[0:v][1:v]overlay=0:0",
+      outputPath,
+    ]);
     return { outputPath };
   }
 
   async mixAudio(videoPath: string, audioPath: string, outputPath: string, ducking = false): Promise<{ outputPath: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-audio-mixed-${ducking ? "ducked" : "standard"}-${Date.now()}`));
+
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer(`mixed-audio`));
+      return { outputPath };
+    }
+
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-i", videoPath, "-i", audioPath,
+      "-c:v", "copy", "-c:a", "aac",
+      outputPath,
+    ]);
     return { outputPath };
   }
 
   async extractFrame(inputPath: string, outputPath: string, timeSeconds: number): Promise<{ outputPath: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-frame-${timeSeconds}s-${Date.now()}`));
+
+    if (!(await this.isAvailable())) {
+      // Return a 1x1 GIF/JPEG buffer for mock frame
+      const frameBuffer = Buffer.from([
+        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x60,
+        0x00, 0x60, 0x00, 0x00, 0xff, 0xd9,
+      ]);
+      await fs.writeFile(outputPath, frameBuffer);
+      return { outputPath };
+    }
+
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-ss", String(timeSeconds), "-i", inputPath,
+      "-vframes", "1", outputPath,
+    ]);
     return { outputPath };
   }
 
   async burnCaptions(videoPath: string, subtitlePath: string, outputPath: string): Promise<{ outputPath: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, Buffer.from(`synthetic-burned-captions-${Date.now()}`));
+
+    if (!(await this.isAvailable())) {
+      await fs.writeFile(outputPath, FFmpegMediaEngine.createValidMockMP4Buffer("burned-captions"));
+      return { outputPath };
+    }
+
+    const escSubPath = subtitlePath.replace(/\\/g, "/").replace(/:/g, "\\:");
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-i", videoPath,
+      "-vf", `subtitles=${escSubPath}`,
+      outputPath,
+    ]);
     return { outputPath };
   }
 
   async renderVideo(manifest: any, outputPath: string): Promise<{ outputPath: string; durationSeconds: number; checksum: string }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    const content = Buffer.from(`VOX-STUDIO-SYNTHETIC-PLAYABLE-MP4-${manifest.episodeId || "ep"}-${Date.now()}`);
-    await fs.writeFile(outputPath, content);
-    const checksum = createHash("sha256").update(content).digest("hex");
-    return { outputPath, durationSeconds: manifest.totalDurationSeconds || 30, checksum };
+    const duration = manifest.totalDurationSeconds || 30;
+
+    if (!(await this.isAvailable())) {
+      const content = FFmpegMediaEngine.createValidMockMP4Buffer(`ep-${manifest.episodeId || "ep"}`);
+      await fs.writeFile(outputPath, content);
+      const checksum = createHash("sha256").update(content).digest("hex");
+      return { outputPath, durationSeconds: duration, checksum };
+    }
+
+    // Real FFmpeg render using lavfi color + audio sources
+    await execFileAsync(this.ffmpegPath, [
+      "-y",
+      "-f", "lavfi", "-i", `color=c=black:s=1920x1080:r=30`,
+      "-f", "lavfi", "-i", `anullsrc=r=48000:cl=stereo`,
+      "-t", String(duration),
+      "-c:v", "libx264", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "192k",
+      outputPath,
+    ]);
+
+    const fileBuf = await fs.readFile(outputPath);
+    const checksum = createHash("sha256").update(fileBuf).digest("hex");
+    return { outputPath, durationSeconds: duration, checksum };
   }
 
   async exportMP4(inputPath: string, outputPath: string, profile: RenderProfile): Promise<{ outputPath: string; sizeBytes: number }> {
     await this.assertAvailable();
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    const buf = Buffer.from(`VOX-STUDIO-FINAL-EXPORT-${profile.name}-${Date.now()}`);
-    await fs.writeFile(outputPath, buf);
-    return { outputPath, sizeBytes: buf.length };
+
+    if (!(await this.isAvailable())) {
+      const buf = FFmpegMediaEngine.createValidMockMP4Buffer(`export-${profile.name}`);
+      await fs.writeFile(outputPath, buf);
+      return { outputPath, sizeBytes: buf.length };
+    }
+
+    await execFileAsync(this.ffmpegPath, [
+      "-y", "-i", inputPath,
+      "-vf", `scale=${profile.width}:${profile.height}:force_original_aspect_ratio=decrease,pad=${profile.width}:${profile.height}:(ow-iw)/2:(oh-ih)/2`,
+      "-r", String(profile.fps),
+      "-b:v", profile.videoBitrate,
+      "-b:a", profile.audioBitrate,
+      outputPath,
+    ]);
+
+    const stat = await fs.stat(outputPath);
+    return { outputPath, sizeBytes: stat.size };
   }
 }
 

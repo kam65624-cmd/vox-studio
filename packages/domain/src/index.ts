@@ -1084,8 +1084,11 @@ export class HumanizationDirector {
 // ─── P0-J Prompt Compiler ──────────────────────────────────────────────────────
 
 export interface PromptCompilerInput {
+  sceneContract?: SceneContract;
   scene?: SceneContract;
+  shotNode?: ShotNode;
   shot?: ShotNode;
+  creativeDna?: CreativeDNA;
   creativeDNA?: CreativeDNA;
   styleSkill?: StyleSkill;
   character?: Character;
@@ -1094,86 +1097,133 @@ export interface PromptCompilerInput {
   props?: Prop[];
   continuityConstraints?: string[];
   negativeRules?: string[];
+  language?: string;
+  aspectRatio?: string;
+  camera?: string;
+  lighting?: string;
+  motion?: string;
+  customInstruction?: string;
 }
 
 export class PromptCompiler {
-  static compilePrompt(input: PromptCompilerInput): CompiledPrompt {
-    const parts: string[] = [];
+  static compile(input: PromptCompilerInput): CompiledPrompt {
+    const scene: any = input.sceneContract || input.scene;
+    const shot: any = input.shotNode || input.shot;
+    const dna: any = input.creativeDna || input.creativeDNA;
+    const styleSkill: any = input.styleSkill;
+    const character: any = input.character;
+    const wardrobe: any = input.wardrobe;
+    const language = input.language || "ar";
+    const aspectRatio = input.aspectRatio || "16:9";
 
-    // 1. Style & Skill Language
-    if (input.creativeDNA?.styleName) {
-      parts.push(`[Style: ${input.creativeDNA.styleName}]`);
-    }
-    if (input.styleSkill?.name) {
-      parts.push(`[Skill: ${input.styleSkill.name}]`);
-    }
+    const instructions: string[] = [];
+    if (input.customInstruction) instructions.push(input.customInstruction);
+    if (scene?.goal || scene?.narrativePurpose) instructions.push(`Goal: ${scene?.goal || scene?.narrativePurpose}`);
+    if (shot?.visualDescription || shot?.subject) instructions.push(`Shot: ${shot?.visualDescription || shot?.subject}`);
 
-    // 2. Character Identity & Wardrobe
-    if (input.character?.identity) {
-      parts.push(`Character: ${input.character.identity}. Personality: ${input.character.personality || "Professional"}.`);
+    const visualParts: string[] = [];
+    if (dna?.styleName) visualParts.push(`[Style: ${dna.styleName}]`);
+    if (styleSkill?.name) visualParts.push(`[Skill: ${styleSkill.name}]`);
+    if (character?.visualPrompt || character?.identity) {
+      visualParts.push(`Character: ${character.visualPrompt || character.identity}`);
     }
-    if (input.wardrobe?.name) {
-      parts.push(`Wardrobe: ${input.wardrobe.name}. Palette: ${input.wardrobe.colorPalette?.join(", ") || "Default"}.`);
-    }
-
-    // 3. Studio & Environment
     if (input.studio?.name) {
-      parts.push(`Studio: ${input.studio.name}. Elements: ${input.studio.elements?.join(", ") || "Studio stage"}.`);
+      visualParts.push(`Studio: ${input.studio.name} (${input.studio.lighting || "studio lighting"})`);
     }
-
-    // 4. Props
+    if (wardrobe?.description || wardrobe?.name) {
+      visualParts.push(`Wardrobe: ${wardrobe.description || wardrobe.name}`);
+    }
     if (input.props && input.props.length > 0) {
-      parts.push(`Props: ${input.props.map((p) => p.name).join(", ")}.`);
+      visualParts.push(`Props: ${input.props.map((p) => p.name).sort().join(", ")}`);
+    }
+    if (dna?.primaryColor || dna?.accentColor) {
+      visualParts.push(`Palette Lock: Primary ${dna.primaryColor || "#000"}, Accent ${dna.accentColor || "#FFF"}`);
+    }
+    if (input.camera) visualParts.push(`Camera: ${input.camera}`);
+    if (input.lighting) visualParts.push(`Lighting: ${input.lighting}`);
+
+    const motionParts: string[] = [];
+    if (input.motion) motionParts.push(input.motion);
+    if (shot?.cameraMovement) motionParts.push(`Movement: ${shot.cameraMovement}`);
+
+    const styleConstraints: string[] = [];
+    if (styleSkill) {
+      styleConstraints.push(`Skill: ${styleSkill.name} (v${styleSkill.version || "1.0"})`);
+      if (styleSkill.cameraLanguage) styleConstraints.push(`CameraLang: ${styleSkill.cameraLanguage}`);
+      if (styleSkill.lightingLanguage) styleConstraints.push(`LightingLang: ${styleSkill.lightingLanguage}`);
     }
 
-    // 5. Scene Script & Visual Intent
-    if (input.scene) {
-      parts.push(`Scene Script: "${input.scene.dialogueText || input.scene.narrativePurpose}". Visual Intent: ${input.scene.visualIntent}.`);
+    const negRules: string[] = [];
+    if (input.negativeRules) negRules.push(...input.negativeRules);
+    if (dna?.forbiddenPatterns) negRules.push(...dna.forbiddenPatterns);
+    if (dna?.negativeRules) negRules.push(...dna.negativeRules);
+    const sortedNegatives = Array.from(new Set(negRules)).sort();
+
+    const contConstraints: string[] = [];
+    if (input.continuityConstraints) contConstraints.push(...input.continuityConstraints);
+    if (contConstraints.length > 0) {
+      visualParts.push(`Continuity: ${contConstraints.join("; ")}`);
     }
+    const sortedContinuity = Array.from(new Set(contConstraints)).sort();
 
-    // 6. Camera & Motion Language
-    if (input.shot) {
-      parts.push(`Shot Type: ${input.shot.shotType}. Camera Motion: ${input.shot.cameraMovement || "Static"}. Action: ${input.shot.subject || "Presentation"}.`);
-    } else if (input.creativeDNA?.cameraLanguage) {
-      parts.push(`Camera Language: ${input.creativeDNA.cameraLanguage}.`);
-    }
+    const canonicalObject = {
+      aspectRatio,
+      camera: input.camera || "",
+      characterId: character?.id || "",
+      continuityConstraints: sortedContinuity,
+      creativeDnaVersion: dna?.version ?? 1,
+      customInstruction: input.customInstruction || "",
+      language,
+      lighting: input.lighting || "",
+      motion: input.motion || "",
+      negativeRules: sortedNegatives,
+      props: (input.props || []).map((p) => p.id || p.name).sort(),
+      sceneId: scene?.id || "",
+      shotId: shot?.id || "",
+      studioId: input.studio?.id || "",
+      styleSkillVersion: styleSkill?.version || "1.0",
+      wardrobeId: wardrobe?.id || "",
+    };
 
-    // 7. Palette Lock
-    if (input.creativeDNA) {
-      parts.push(`Palette Lock: Primary ${input.creativeDNA.primaryColor}, Accent ${input.creativeDNA.accentColor}.`);
-    }
+    const canonicalJson = JSON.stringify(canonicalObject);
+    const fingerprint = createHash("sha256").update(canonicalJson).digest("hex");
 
-    // 8. Continuity Constraints
-    if (input.continuityConstraints && input.continuityConstraints.length > 0) {
-      parts.push(`Continuity: ${input.continuityConstraints.join("; ")}.`);
-    }
-
-    const fullPrompt = parts.join(" ");
-
-    // Negative Rules Compilation
-    const negParts: string[] = input.negativeRules || [];
-    if (input.creativeDNA?.negativeRules) {
-      negParts.push(...input.creativeDNA.negativeRules);
-    }
-    const negativePrompt = Array.from(new Set(negParts)).join(", ") || "No photorealism, No 3D renders";
-
-    // Deterministic SHA-256 fingerprint calculation
-    const rawFingerprintInput = `${fullPrompt}|${negativePrompt}|v${input.creativeDNA?.version || 1}|s${input.styleSkill?.id || "1.0"}`;
-    const fingerprint = createHash("sha256").update(rawFingerprintInput).digest("hex");
+    const visualPromptStr = visualParts.join(" | ");
+    const instructionStr = instructions.join(" ; ") || "Generate visual frame for VOX Studio episode";
+    const fullPrompt = `${instructionStr} -- ${visualPromptStr}`.trim();
 
     return {
-      prompt: fullPrompt,
-      negativePrompt,
-      fingerprint,
-      creativeDnaVersion: input.creativeDNA?.version || 1,
-      styleSkillVersion: input.styleSkill?.id || "1.0",
+      instruction: instructionStr,
+      visualPrompt: visualPromptStr,
+      motionPrompt: motionParts.join(" ; ") || undefined,
+      negativePrompt: sortedNegatives.join(", ") || "No photorealism, No 3D renders",
+      styleConstraints,
+      continuityConstraints: sortedContinuity,
       parameters: {
-        width: 1920,
-        height: 1080,
-        fps: 30,
-        aspectRatio: "16:9",
+        aspectRatio,
+        language,
+        camera: input.camera,
+        lighting: input.lighting,
       },
+      metadata: {
+        language,
+        aspectRatio,
+        sceneId: scene?.id,
+        shotId: shot?.id,
+        characterId: character?.id,
+        studioId: input.studio?.id,
+        styleId: styleSkill?.id,
+        creativeDnaVersion: dna?.version ?? 1,
+        styleSkillVersion: styleSkill?.version || styleSkill?.id || "1.0",
+        compiledAt: new Date().toISOString(),
+      },
+      fingerprint,
+      prompt: fullPrompt,
     };
+  }
+
+  static compilePrompt(input: PromptCompilerInput): CompiledPrompt {
+    return this.compile(input);
   }
 }
 
@@ -1298,13 +1348,22 @@ export function createGenerationJobsFromPlan(
   return plan.nodes
     .filter((n) => n.action === "GENERATE")
     .map((planNode) => {
-      const compiled = compiledPromptsMap.get(planNode.nodeId) || {
-        prompt: `Execute production node ${planNode.nodeId} (${planNode.nodeType})`,
+      const compiled: CompiledPrompt = compiledPromptsMap.get(planNode.nodeId) || {
+        instruction: `Execute production node ${planNode.nodeId} (${planNode.nodeType})`,
+        visualPrompt: `Production node ${planNode.nodeId}`,
         negativePrompt: "No photorealism, No 3D renders",
-        fingerprint: `fp-${planNode.nodeId}`,
-        creativeDnaVersion: 1,
-        styleSkillVersion: "1.0",
+        styleConstraints: [],
+        continuityConstraints: [],
         parameters: {},
+        metadata: {
+          language: "ar",
+          aspectRatio: "16:9",
+          creativeDnaVersion: 1,
+          styleSkillVersion: "1.0",
+          compiledAt: new Date().toISOString(),
+        },
+        fingerprint: `fp-${planNode.nodeId}`,
+        prompt: `Execute production node ${planNode.nodeId} (${planNode.nodeType})`,
       };
 
       return {
@@ -1318,8 +1377,8 @@ export function createGenerationJobsFromPlan(
         inputAssets: planNode.dependencies,
         prompt: compiled.prompt,
         negativePrompt: compiled.negativePrompt,
-        creativeDnaVersion: compiled.creativeDnaVersion,
-        styleSkillVersion: compiled.styleSkillVersion,
+        creativeDnaVersion: compiled.metadata.creativeDnaVersion,
+        styleSkillVersion: compiled.metadata.styleSkillVersion,
         generationParameters: compiled.parameters,
         priority: 1,
         status: planNode.blockingDependencies.length > 0 ? "BLOCKED" : "QUEUED",
@@ -1673,6 +1732,9 @@ export function runQualityGates(input: QualityGateInput): QualityGateSummary {
     checkedAt: new Date().toISOString(),
   };
 }
+
+
+
 
 
 

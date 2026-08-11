@@ -647,7 +647,7 @@ describe("P0-J Step 1/2 Execution Planner & PromptCompiler", () => {
     const compiled = PromptCompiler.compilePrompt({ creativeDNA: dna });
     expect(compiled.prompt).toContain("VOX Editorial Style");
     expect(compiled.prompt).toContain("Palette Lock");
-    expect(compiled.creativeDnaVersion).toBe(1);
+    expect(compiled.metadata.creativeDnaVersion).toBe(1);
   });
 
   // Scenario 15: StyleSkill inclusion in prompt
@@ -655,7 +655,7 @@ describe("P0-J Step 1/2 Execution Planner & PromptCompiler", () => {
     const skill = { id: "vox-mixed-media", name: "VOX Mixed Media Editorial" } as unknown as StyleSkill;
     const compiled = PromptCompiler.compilePrompt({ styleSkill: skill });
     expect(compiled.prompt).toContain("VOX Mixed Media Editorial");
-    expect(compiled.styleSkillVersion).toBe("vox-mixed-media");
+    expect(compiled.metadata.styleSkillVersion).toBe("vox-mixed-media");
   });
 
   // Scenario 16: Continuity constraints inclusion
@@ -785,3 +785,143 @@ describe("K9 Quality Gate Pipeline", () => {
     expect(summary.checkedAt).toBeDefined();
   });
 });
+
+describe("PromptCompiler (P0-K.1 GAP-2)", () => {
+  const mockChar: Character = {
+    id: "char-tradeo",
+    assetId: "ast-char-1",
+    name: "Prof. Tradeo",
+    slug: "prof-tradeo",
+    description: "Financial host",
+    personality: "Analytical",
+    identity: "Professor",
+    visualPrompt: "Middle-aged professor in formal suit",
+    expressions: ["neutral", "thinking"],
+    gestures: ["pointing"],
+    allowedStyleIds: ["vox-mixed-media"],
+    allowedStudioIds: ["studio-main"],
+    allowedVoiceIds: ["voice-ar"],
+    status: "active",
+    isCanonical: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const mockStudio: Studio = {
+    id: "studio-main",
+    assetId: "ast-studio-1",
+    name: "Tradeo Study Studio",
+    slug: "tradeo-study",
+    description: "Editorial study room",
+    elements: ["desk", "bookshelf"],
+    lighting: "Warm dramatic study lighting",
+    cameraPositions: ["WIDE", "MEDIUM"],
+    backgroundElements: ["books"],
+    compatibleStyleIds: ["vox-mixed-media"],
+    compatibleCharacterIds: ["char-tradeo"],
+    status: "active",
+    isCanonical: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const mockStyle: StyleSkill = {
+    id: "vox-mixed-media",
+    name: "VOX Mixed Media Editorial",
+    slug: "vox-mixed-media",
+    description: "Mixed media editorial visual style",
+    version: "1.2",
+    visualGrammar: "Flat motion graphics over video",
+    colorSystem: { primary: "#000", secondary: "#FFF", accent: "#FF3B30" },
+    composition: "Rule of thirds",
+    camera: "Static medium host shot",
+    motion: "Subtle zoom",
+    transitions: "Cut with motion blur",
+    typography: "Outfit Bold",
+    texture: "Paper grain",
+    props: [],
+    negativeRules: ["no photorealism"],
+    promptGrammar: "Subject | Style | Lighting | Camera",
+    qualityRules: ["no watermarks"],
+    cameraLanguage: "Static medium host shot",
+    lightingLanguage: "High contrast editorial lighting",
+    motionLanguage: "Subtle subtle zoom",
+  };
+
+  const mockDna: CreativeDNA = {
+    id: "dna-01",
+    version: 1,
+    pacingRule: "DYNAMIC",
+    colorPalette: ["#FF3B30", "#111827"],
+    typography: "Outfit",
+    motionStyle: "SNAPPY",
+    forbiddenPatterns: ["generic stock photos", "watermarks"],
+    mandatoryElements: ["financial graphics"],
+  };
+
+  it("1. produces deterministic output for identical input", () => {
+    const input = { character: mockChar, studio: mockStudio, customInstruction: "Explain inflation" };
+    const p1 = PromptCompiler.compile(input);
+    const p2 = PromptCompiler.compile(input);
+    expect(p1.prompt).toBe(p2.prompt);
+    expect(p1.fingerprint).toBe(p2.fingerprint);
+  });
+
+  it("2. produces deterministic fingerprint via SHA-256", () => {
+    const compiled = PromptCompiler.compile({ character: mockChar, studio: mockStudio });
+    expect(compiled.fingerprint).toHaveLength(64);
+  });
+
+  it("3. propagates Creative DNA rules and forbidden patterns", () => {
+    const compiled = PromptCompiler.compile({ creativeDna: mockDna });
+    expect(compiled.negativePrompt).toContain("generic stock photos");
+    expect(compiled.metadata.creativeDnaVersion).toBe(1);
+  });
+
+  it("4. propagates Style Skill camera and lighting language", () => {
+    const compiled: any = PromptCompiler.compile({ styleSkill: mockStyle });
+    expect(compiled.styleConstraints).toContain("Skill: VOX Mixed Media Editorial (v1.2)");
+    expect(compiled.metadata.styleSkillVersion).toBe("1.2");
+  });
+
+  it("5. propagates Character and Studio prompts", () => {
+    const compiled: any = PromptCompiler.compile({ character: mockChar, studio: mockStudio });
+    expect(compiled.visualPrompt).toContain("Middle-aged professor in formal suit");
+    expect(compiled.visualPrompt).toContain("Tradeo Study Studio");
+  });
+
+  it("6. combines negative rules and deduplicates them", () => {
+    const compiled: any = PromptCompiler.compile({
+      negativeRules: ["blur", "generic stock photos"],
+      creativeDna: mockDna,
+    });
+    expect(compiled.negativePrompt).toContain("blur");
+    expect(compiled.negativePrompt).toContain("generic stock photos");
+    // Ensure deduplicated
+    const count = (compiled.negativePrompt.match(/generic stock photos/g) || []).length;
+    expect(count).toBe(1);
+  });
+
+  it("7. propagates continuity constraints", () => {
+    const compiled: any = PromptCompiler.compile({ continuityConstraints: ["Keep glasses on character"] });
+    expect(compiled.continuityConstraints).toContain("Keep glasses on character");
+  });
+
+  it("8. handles language setting", () => {
+    const compiled: any = PromptCompiler.compile({ language: "en" });
+    expect(compiled.metadata.language).toBe("en");
+  });
+
+  it("9. handles aspect ratio setting", () => {
+    const compiled: any = PromptCompiler.compile({ aspectRatio: "9:16" });
+    expect(compiled.metadata.aspectRatio).toBe("9:16");
+    expect(compiled.parameters.aspectRatio).toBe("9:16");
+  });
+
+  it("10. different inputs produce different fingerprints", () => {
+    const p1 = PromptCompiler.compile({ customInstruction: "Explain inflation" });
+    const p2 = PromptCompiler.compile({ customInstruction: "Explain deflation" });
+    expect(p1.fingerprint).not.toBe(p2.fingerprint);
+  });
+});
+
