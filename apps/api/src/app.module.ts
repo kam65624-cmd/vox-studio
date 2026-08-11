@@ -12,6 +12,7 @@ import { WardrobesModule } from "./modules/wardrobes/wardrobes.module";
 import { PropsModule } from "./modules/props/props.module";
 import { AssetsModule } from "./modules/assets/assets.module";
 import { RecipesModule } from "./modules/recipes/recipes.module";
+import { ModelsModule } from "./modules/models/models.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { RecipesModule } from "./modules/recipes/recipes.module";
     PropsModule,
     AssetsModule,
     RecipesModule,
+    ModelsModule,
   ],
 })
 export class AppModule {}

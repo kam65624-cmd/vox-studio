@@ -565,3 +565,63 @@ model RefilmTask {
   @@index([episodeId, status])
 }
 
+// ─── P0-I Model Registry & AI Provenance ──────────────────────────────────────
+
+model AiProvider {
+  id          String   @id @default(uuid())
+  providerId  String   @unique
+  name        String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  models AiModel[]
+}
+
+model AiModel {
+  id                String   @id @default(uuid())
+  modelId           String   @unique
+  providerId        String
+  displayName       String
+  version           String
+  qualityTier       String   @default("STANDARD")
+  speedTier         String   @default("BALANCED")
+  costTier          String   @default("MEDIUM")
+  availability      String   @default("ONLINE")
+  configurationJson Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  provider     AiProvider         @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  capabilities AiModelCapability[]
+}
+
+model AiModelCapability {
+  id         String   @id @default(uuid())
+  modelId    String
+  capability String   // TEXT_GENERATION | REASONING | VISION | IMAGE_GENERATION | VIDEO_GENERATION | VOICE_GENERATION | etc.
+
+  model AiModel @relation(fields: [modelId], references: [modelId], onDelete: Cascade)
+
+  @@unique([modelId, capability])
+}
+
+model GenerationProvenance {
+  id                  String   @id @default(uuid())
+  providerId          String
+  modelId             String
+  modelVersion        String
+  generationRequestId String
+  creativeDnaVersion  Int?
+  styleSkillVersion   String?
+  episodeId           String?
+  sceneId             String?
+  shotId              String?
+  productionNodeId    String?
+  createdAt           DateTime @default(now())
+
+  @@index([episodeId])
+  @@index([modelId])
+}
+
+

@@ -661,6 +661,87 @@ export const HumanizationReportSchema = z.object({
   evaluatedAt: z.string(),
 });
 
+// ─── P0-I Model Registry, Router & Provenance ─────────────────────────────────
+
+export const ModelCapabilitySchema = z.enum([
+  "TEXT_GENERATION",
+  "REASONING",
+  "STRUCTURED_OUTPUT",
+  "VISION",
+  "IMAGE_GENERATION",
+  "IMAGE_EDITING",
+  "VIDEO_GENERATION",
+  "VOICE_GENERATION",
+  "VOICE_TRANSCRIPTION",
+  "AUDIO_GENERATION",
+  "EMBEDDINGS",
+  "UNKNOWN",
+]);
+
+export const QualityTierSchema = z.enum(["LOW", "STANDARD", "HIGH", "PREMIUM"]);
+export const SpeedTierSchema = z.enum(["FAST", "BALANCED", "SLOW"]);
+export const CostTierSchema = z.enum(["FREE", "LOW", "MEDIUM", "HIGH"]);
+
+export const ModelDefinitionSchema = z.object({
+  modelId: z.string(),
+  providerId: z.string(),
+  displayName: z.string(),
+  version: z.string(),
+  capabilities: z.array(ModelCapabilitySchema),
+  modalities: z.object({
+    inputs: z.array(z.string()),
+    outputs: z.array(z.string()),
+  }),
+  languages: z.array(z.string()),
+  maxInput: z.number(),
+  maxOutput: z.number(),
+  qualityTier: QualityTierSchema,
+  speedTier: SpeedTierSchema,
+  costTier: CostTierSchema,
+  supportsStreaming: z.boolean(),
+  supportsBatch: z.boolean(),
+  supportsStructuredOutput: z.boolean(),
+  supportsImageReference: z.boolean(),
+  supportsImageEditing: z.boolean(),
+  supportsVideo: z.boolean(),
+  supportsAudio: z.boolean(),
+  availability: z.enum(["ONLINE", "OFFLINE", "DEPRECATED", "EXPERIMENTAL"]),
+  configurationSchema: z.record(z.unknown()).optional(),
+});
+
+export const RouterSelectionRequestSchema = z.object({
+  capability: ModelCapabilitySchema,
+  task: z.string(),
+  language: z.string().optional(),
+  qualityRequirement: QualityTierSchema.optional(),
+  latencyRequirement: SpeedTierSchema.optional(),
+  costPreference: CostTierSchema.optional(),
+  requiredFeatures: z.array(z.string()).optional(),
+  projectConstraints: z.array(z.string()).optional(),
+});
+
+export const RouterSelectionResponseSchema = z.object({
+  selectedModel: ModelDefinitionSchema,
+  providerId: z.string(),
+  reason: z.string(),
+  fallbackChain: z.array(z.string()),
+});
+
+export const GenerationProvenanceSchema = z.object({
+  id: IdSchema,
+  providerId: z.string(),
+  modelId: z.string(),
+  modelVersion: z.string(),
+  generationRequestId: z.string(),
+  creativeDnaVersion: z.number().optional(),
+  styleSkillVersion: z.string().optional(),
+  episodeId: z.string().optional(),
+  sceneId: z.string().optional(),
+  shotId: z.string().optional(),
+  productionNodeId: z.string().optional(),
+  createdAt: z.string(),
+});
+
 // ─── Export types ─────────────────────────────────────────────────────────────
 
 export type EpisodeStatus = z.infer<typeof EpisodeStatusSchema>;
@@ -709,6 +790,15 @@ export type HumanizationType = z.infer<typeof HumanizationTypeSchema>;
 export type HumanizationIssue = z.infer<typeof HumanizationIssueSchema>;
 export type HumanizationPlan = z.infer<typeof HumanizationPlanSchema>;
 export type HumanizationReport = z.infer<typeof HumanizationReportSchema>;
+export type ModelCapability = z.infer<typeof ModelCapabilitySchema>;
+export type QualityTier = z.infer<typeof QualityTierSchema>;
+export type SpeedTier = z.infer<typeof SpeedTierSchema>;
+export type CostTier = z.infer<typeof CostTierSchema>;
+export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
+export type RouterSelectionRequest = z.infer<typeof RouterSelectionRequestSchema>;
+export type RouterSelectionResponse = z.infer<typeof RouterSelectionResponseSchema>;
+export type GenerationProvenance = z.infer<typeof GenerationProvenanceSchema>;
+
 
 
 
