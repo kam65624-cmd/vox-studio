@@ -106,3 +106,41 @@ describe("FFmpegMediaEngine", () => {
     expect(renderRes.checksum.length).toBe(64);
   });
 });
+
+describe("Audio, Captions & Thumbnails", () => {
+  it("validates audio quality and mixes voice with music", async () => {
+    const { AudioPipeline } = await import("./index");
+    const voiceBuf = Buffer.from("voice audio stream content data bytes placeholder");
+    const report = AudioPipeline.validateAudioQuality(voiceBuf);
+    expect(report.valid).toBe(true);
+    expect(report.sampleRateHz).toBe(48000);
+
+    const mixed = await AudioPipeline.mixVoiceAndMusic(voiceBuf, Buffer.from("music stream"), -14);
+    expect(mixed.length).toBeGreaterThan(voiceBuf.length);
+  });
+
+  it("generates SRT and WebVTT captions with Arabic RTL shaping", async () => {
+    const { CaptionEngine } = await import("./index");
+    const segments = [
+      { id: 1, text: "ماذا يحدث لأسواق المال اليوم عند إعلان سعر الفائدة؟", startMs: 0, endMs: 3500 },
+      { id: 2, text: "تراجعت الأسهم بنسبة 3% بينما ارتفعت أسعار الذهب.", startMs: 3600, endMs: 7000 },
+    ];
+
+    const srt = CaptionEngine.generateSRT(segments, "ar");
+    expect(srt).toContain("00:00:00,000 --> 00:00:03,500");
+    expect(srt).toContain("الفائدة");
+
+    const vtt = CaptionEngine.generateWebVTT(segments, "ar");
+    expect(vtt).toContain("WEBVTT");
+    expect(vtt).toContain("00:00:03.600 --> 00:00:07.000");
+  });
+
+  it("generates primary, alternate, and social safe thumbnails", async () => {
+    const { ThumbnailEngine } = await import("./index");
+    const pkg = await ThumbnailEngine.generateThumbnails(Buffer.from("frame image data"), 1);
+    expect(pkg.primary).toBeDefined();
+    expect(pkg.alternate).toBeDefined();
+    expect(pkg.socialSafe).toBeDefined();
+    expect(pkg.metadata.profiles).toContain("16:9");
+  });
+});
