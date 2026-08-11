@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Param, Body, NotFoundException } from "@nestjs/common";
 import { ApiTags, ApiOperation } from "@nestjs/swagger";
-import { ModelRegistry, ModelRouter } from "@vox/ai";
+import { ModelRegistry, ModelRouter, ProviderExecutionEngine } from "@vox/ai";
 import { RouterSelectionRequestSchema } from "@vox/contracts";
 
 const registry = new ModelRegistry();
@@ -23,6 +23,16 @@ export class ModelsController {
   getProviders() {
     return {
       providers: registry.getProviders(),
+    };
+  }
+
+  @Get("providers/status")
+  @ApiOperation({ summary: "Get operational and health status of AI providers" })
+  getProvidersStatus() {
+    const engine = new ProviderExecutionEngine(registry, router);
+    return {
+      providers: engine.getProvidersStatus(),
+      runtimeMode: engine.getRuntimeMode(),
     };
   }
 

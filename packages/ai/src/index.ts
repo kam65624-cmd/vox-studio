@@ -194,13 +194,11 @@ export class UnifiedMockAdapter implements UnifiedProviderAdapter {
   }
 }
 
-// ─── Initial Model Registry Entries ──────────────────────────────────────────
-
 export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
   {
     modelId: "meta/muse-glimmer-30b",
-    providerId: "meta",
-    displayName: "Meta Muse Glimmer 30B",
+    providerId: "nvidia",
+    displayName: "Meta Muse Glimmer 30B (NVIDIA NIM)",
     version: "3.0.0",
     capabilities: ["TEXT_GENERATION", "REASONING", "STRUCTURED_OUTPUT"],
     modalities: { inputs: ["text"], outputs: ["text"] },
@@ -561,6 +559,18 @@ export interface ProviderExecutionResult<T = any> {
   selectedProviderId: string;
 }
 
+// ─── Provider Module Exports ──────────────────────────────────────────────
+
+export * from "./providers/openai-compatible/types";
+export * from "./providers/openai-compatible/client";
+export * from "./providers/openai-compatible/adapter";
+export * from "./providers/nvidia/config";
+export * from "./providers/nvidia/adapter";
+
+import { NVIDIAAdapter } from "./providers/nvidia/adapter";
+
+export type VoxRuntimeMode = "mock" | "real" | "auto";
+
 export class ProviderExecutionEngine {
   private adapters = new Map<string, UnifiedProviderAdapter>();
 
@@ -576,10 +586,61 @@ export class ProviderExecutionEngine {
     this.adapters.set("anthropic", mockAdapter);
     this.adapters.set("elevenlabs", mockAdapter);
     this.adapters.set("runway", mockAdapter);
+
+    // Register real NVIDIA NIM adapter
+    const nvidiaAdapter = new NVIDIAAdapter();
+    this.adapters.set(nvidiaAdapter.providerId, nvidiaAdapter);
   }
 
   registerAdapter(adapter: UnifiedProviderAdapter): void {
     this.adapters.set(adapter.providerId, adapter);
+  }
+
+  public getRuntimeMode(): VoxRuntimeMode {
+    const raw = typeof process !== "undefined" ? process.env["VOX_RUNTIME_MODE"] : undefined;
+    const envMode = typeof raw === "string" ? raw.toLowerCase() : undefined;
+    if (envMode === "real") return "real";
+    if (envMode === "mock") return "mock";
+    return "auto";
+  }
+
+  public getProvidersStatus(): Array<{
+    providerId: string;
+    displayName: string;
+    status: "AVAILABLE" | "NOT_CONFIGURED" | "AUTH_FAILED" | "UNAVAILABLE";
+    runtimeMode: VoxRuntimeMode;
+    defaultModel?: string;
+  }> {
+    const mode = this.getRuntimeMode();
+    const result: Array<{
+      providerId: string;
+      displayName: string;
+      status: "AVAILABLE" | "NOT_CONFIGURED" | "AUTH_FAILED" | "UNAVAILABLE";
+      runtimeMode: VoxRuntimeMode;
+      defaultModel?: string;
+    }> = [];
+
+    const providers = this.registry.getProviders();
+    for (const p of providers) {
+      const adapter = this.adapters.get(p.providerId);
+      const isConfigured = (adapter as any)?.isConfigured ? (adapter as any).isConfigured() : true;
+      let status: "AVAILABLE" | "NOT_CONFIGURED" | "AUTH_FAILED" | "UNAVAILABLE" = "AVAILABLE";
+
+      if (mode === "mock") {
+        status = "AVAILABLE";
+      } else if (!isConfigured) {
+        status = "NOT_CONFIGURED";
+      }
+
+      result.push({
+        providerId: p.providerId,
+        displayName: adapter?.displayName || p.name,
+        status,
+        runtimeMode: mode,
+      });
+    }
+
+    return result;
   }
 
   async executeJob(job: {
@@ -605,18 +666,33 @@ export class ProviderExecutionEngine {
     let attempts = 0;
     let lastError: ProviderExecutionError | undefined;
 
+    const mode = this.getRuntimeMode();
+
     while (attempts < maxRetries) {
       attempts++;
-      const adapter = this.adapters.get(currentProviderId) || this.adapters.get("vox-mock-provider");
-      if (!adapter) {
-        lastError = new ProviderExecutionError(
-          "PROVIDER_NOT_CONFIGURED",
-          `No adapter registered for provider ${currentProviderId}`,
-          currentProviderId,
-          currentModel.modelId,
-          false
-        );
-        break;
+      let adapter = this.adapters.get(currentProviderId);
+      const isConfigured = (adapter as any)?.isConfigured ? (adapter as any).isConfigured() : true;
+
+      if (mode === "mock") {
+        adapter = this.adapters.get("vox-mock-provider")!;
+        currentProviderId = adapter.providerId;
+      } else if (mode === "real") {
+        if (!adapter || !isConfigured) {
+          lastError = new ProviderExecutionError(
+            "AUTH_ERROR",
+            `Real runtime mode requested (VOX_RUNTIME_MODE=real) but provider "${currentProviderId}" is not configured or missing API key.`,
+            currentProviderId,
+            currentModel.modelId,
+            false
+          );
+          break;
+        }
+      } else {
+        // mode === "auto"
+        if (!adapter || !isConfigured) {
+          adapter = this.adapters.get("vox-mock-provider")!;
+          currentProviderId = adapter.providerId;
+        }
       }
 
       try {

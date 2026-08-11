@@ -19,13 +19,13 @@ describe("ModelsController", () => {
   it("should get specific model details", () => {
     const model = controller.getModel("meta/muse-glimmer-30b");
     expect(model.modelId).toBe("meta/muse-glimmer-30b");
-    expect(model.providerId).toBe("meta");
+    expect(model.providerId).toBe("nvidia");
   });
 
   it("should return providers list", () => {
     const res = controller.getProviders();
     expect(res.providers.length).toBeGreaterThan(0);
-    expect(res.providers.some((p: any) => p.providerId === "meta")).toBe(true);
+    expect(res.providers.some((p: any) => p.providerId === "nvidia")).toBe(true);
   });
 
   it("should return capabilities list", () => {
