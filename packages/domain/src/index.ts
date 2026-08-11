@@ -33,6 +33,7 @@ import {
   ProductionExecutionPlan,
   CompiledPrompt,
   ModelCapability,
+  ProductionState,
   Character,
   Studio,
   Wardrobe,
@@ -69,6 +70,29 @@ export const ALLOWED_TRANSITIONS: Record<EpisodeStatus, EpisodeStatus[]> = {
 
 export function canTransition(current: EpisodeStatus, target: EpisodeStatus): boolean {
   const allowed = ALLOWED_TRANSITIONS[current];
+  return allowed ? allowed.includes(target) : false;
+}
+
+export const ALLOWED_PRODUCTION_STATE_TRANSITIONS: Record<ProductionState, ProductionState[]> = {
+  DRAFT: ["ANALYZING", "CANCELLED"],
+  ANALYZING: ["PLANNING", "FAILED", "CANCELLED"],
+  PLANNING: ["GENERATING", "FAILED", "CANCELLED"],
+  GENERATING: ["VALIDATING", "FAILED", "BLOCKED", "CANCELLED"],
+  VALIDATING: ["ASSEMBLING", "REPAIRING", "FAILED", "CANCELLED"],
+  ASSEMBLING: ["MENTOR_REVIEW", "FAILED", "CANCELLED"],
+  MENTOR_REVIEW: ["RECHECKING", "REPAIRING", "FAILED", "CANCELLED"],
+  REPAIRING: ["RECHECKING", "GENERATING", "FAILED", "CANCELLED"],
+  RECHECKING: ["RENDERING", "REPAIRING", "FAILED", "CANCELLED"],
+  RENDERING: ["FINAL_QA", "FAILED", "CANCELLED"],
+  FINAL_QA: ["COMPLETED", "REPAIRING", "FAILED", "CANCELLED"],
+  COMPLETED: [],
+  FAILED: ["PLANNING", "GENERATING", "REPAIRING", "CANCELLED"],
+  BLOCKED: ["GENERATING", "PLANNING", "CANCELLED"],
+  CANCELLED: ["DRAFT"],
+};
+
+export function canTransitionProductionState(current: ProductionState, target: ProductionState): boolean {
+  const allowed = ALLOWED_PRODUCTION_STATE_TRANSITIONS[current];
   return allowed ? allowed.includes(target) : false;
 }
 
@@ -1103,12 +1127,12 @@ export class PromptCompiler {
 
     // 5. Scene Script & Visual Intent
     if (input.scene) {
-      parts.push(`Scene Script: "${input.scene.text}". Visual Intent: ${input.scene.visualIntent}.`);
+      parts.push(`Scene Script: "${input.scene.dialogueText || input.scene.narrativePurpose}". Visual Intent: ${input.scene.visualIntent}.`);
     }
 
     // 6. Camera & Motion Language
     if (input.shot) {
-      parts.push(`Shot Type: ${input.shot.type}. Camera Motion: ${input.shot.cameraMotion || "Static"}. Action: ${input.shot.action || "Presentation"}.`);
+      parts.push(`Shot Type: ${input.shot.shotType}. Camera Motion: ${input.shot.cameraMovement || "Static"}. Action: ${input.shot.subject || "Presentation"}.`);
     } else if (input.creativeDNA?.cameraLanguage) {
       parts.push(`Camera Language: ${input.creativeDNA.cameraLanguage}.`);
     }
@@ -1140,7 +1164,7 @@ export class PromptCompiler {
       negativePrompt,
       fingerprint,
       creativeDnaVersion: input.creativeDNA?.version || 1,
-      styleSkillVersion: input.styleSkill?.version || "1.0",
+      styleSkillVersion: input.styleSkill?.id || "1.0",
       parameters: {
         width: 1920,
         height: 1080,
@@ -1158,12 +1182,17 @@ const defaultModelRouter: ModelRouterPort = {
   selectModel({ capability }: { capability: ModelCapability; task: string }) {
     const capabilityMap: Record<ModelCapability, string> = {
       TEXT_GENERATION: "openai:gpt-4o",
+      REASONING: "anthropic:claude-3-5-sonnet",
+      STRUCTURED_OUTPUT: "openai:gpt-4o",
+      VISION: "openai:gpt-4o",
       IMAGE_GENERATION: "openai:dall-e-3",
+      IMAGE_EDITING: "openai:dall-e-3",
       VIDEO_GENERATION: "runway:gen3",
       VOICE_GENERATION: "elevenlabs:turbo-v2",
-      IMAGE_EDITING: "openai:dall-e-3",
-      MUSIC_GENERATION: "suno:chirp-v3",
-      REASONING: "anthropic:claude-3-5-sonnet",
+      VOICE_TRANSCRIPTION: "openai:whisper-1",
+      AUDIO_GENERATION: "suno:chirp-v3",
+      EMBEDDINGS: "openai:text-embedding-3",
+      UNKNOWN: "openai:gpt-4o",
     };
     const modelId = capabilityMap[capability] ?? "openai:gpt-4o";
     const [providerId, mid] = modelId.split(":");

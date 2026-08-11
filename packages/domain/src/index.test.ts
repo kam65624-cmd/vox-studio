@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   canTransition,
+  canTransitionProductionState,
   canExportEpisode,
   checkCharacterStudioCompatibility,
   validateProductionRecipe,
@@ -33,6 +34,19 @@ describe("Domain State Machine", () => {
   it("should reject invalid transitions", () => {
     expect(canTransition("DRAFT", "EXPORTED")).toBe(false);
     expect(canTransition("EXPORTED", "DRAFT")).toBe(false);
+  });
+
+  it("should allow valid ProductionState transitions", () => {
+    expect(canTransitionProductionState("DRAFT", "ANALYZING")).toBe(true);
+    expect(canTransitionProductionState("GENERATING", "VALIDATING")).toBe(true);
+    expect(canTransitionProductionState("VALIDATING", "ASSEMBLING")).toBe(true);
+    expect(canTransitionProductionState("ASSEMBLING", "MENTOR_REVIEW")).toBe(true);
+    expect(canTransitionProductionState("FINAL_QA", "COMPLETED")).toBe(true);
+  });
+
+  it("should reject invalid ProductionState transitions", () => {
+    expect(canTransitionProductionState("DRAFT", "COMPLETED")).toBe(false);
+    expect(canTransitionProductionState("COMPLETED", "GENERATING")).toBe(false);
   });
 });
 
@@ -634,10 +648,10 @@ describe("P0-J Step 1/2 Execution Planner & PromptCompiler", () => {
 
   // Scenario 15: StyleSkill inclusion in prompt
   it("Scenario 15: compiled prompt must contain StyleSkill instructions when provided", () => {
-    const skill: StyleSkill = { name: "VOX Mixed Media Editorial", version: "1.0" } as StyleSkill;
+    const skill = { id: "vox-mixed-media", name: "VOX Mixed Media Editorial" } as unknown as StyleSkill;
     const compiled = PromptCompiler.compilePrompt({ styleSkill: skill });
     expect(compiled.prompt).toContain("VOX Mixed Media Editorial");
-    expect(compiled.styleSkillVersion).toBe("1.0");
+    expect(compiled.styleSkillVersion).toBe("vox-mixed-media");
   });
 
   // Scenario 16: Continuity constraints inclusion

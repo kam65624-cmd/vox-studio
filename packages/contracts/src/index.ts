@@ -15,6 +15,24 @@ export const EpisodeStatusSchema = z.enum([
   "EXPORTED",
 ]);
 
+export const ProductionStateSchema = z.enum([
+  "DRAFT",
+  "ANALYZING",
+  "PLANNING",
+  "GENERATING",
+  "VALIDATING",
+  "ASSEMBLING",
+  "MENTOR_REVIEW",
+  "REPAIRING",
+  "RECHECKING",
+  "RENDERING",
+  "FINAL_QA",
+  "COMPLETED",
+  "FAILED",
+  "BLOCKED",
+  "CANCELLED",
+]);
+
 export const SceneTypeSchema = z.enum([
   "HOST",
   "EXPLAINER",
@@ -883,6 +901,7 @@ export type GenerationJob = z.infer<typeof GenerationJobSchema>;
 export type ExecutionPlanNode = z.infer<typeof ExecutionPlanNodeSchema>;
 export type ProductionExecutionPlan = z.infer<typeof ProductionExecutionPlanSchema>;
 export type CompiledPrompt = z.infer<typeof CompiledPromptSchema>;
+export type ProductionState = z.infer<typeof ProductionStateSchema>;
 
 
 
