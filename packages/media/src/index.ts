@@ -68,22 +68,69 @@ export function validateProbeResult(probe: MediaProbeResult): { valid: boolean; 
 
   if (probe.durationSeconds <= 0) {
     errors.push("Duration must be greater than 0");
+  } else if (probe.durationSeconds < 5) {
+    errors.push("Duration too short for valid episode (minimum 5s)");
   }
+
   if (!probe.videoStream) {
     errors.push("Missing video stream");
   } else {
     if (probe.videoStream.width <= 0 || probe.videoStream.height <= 0) {
       errors.push("Invalid video dimensions");
     }
+    if (probe.videoStream.fps < 24) {
+      errors.push(`Video framerate too low (${probe.videoStream.fps}fps) - target 30fps`);
+    }
   }
+
   if (!probe.audioStream) {
     errors.push("Missing audio stream");
+  } else {
+    if (probe.audioStream.channels < 2) {
+      errors.push("Audio is not stereo");
+    }
+    if (probe.audioStream.sampleRate < 44100) {
+      errors.push(`Audio sample rate too low (${probe.audioStream.sampleRate}Hz) - target 48kHz`);
+    }
   }
 
   return {
     valid: errors.length === 0,
     errors,
   };
+}
+
+// ─── P0-K K13: Final Output QA Engine ──────────────────────────────────────
+
+export class FinalQAEngine {
+  static async performDeepQA(probe: MediaProbeResult, mediaEngine: MediaEnginePort): Promise<{ valid: boolean; score: number; report: string[] }> {
+    const report: string[] = [];
+    let score = 100;
+
+    const baseValidation = validateProbeResult(probe);
+    if (!baseValidation.valid) {
+      score -= baseValidation.errors.length * 15;
+      report.push(...baseValidation.errors);
+    }
+
+    // Additional QA checks...
+    if (probe.sizeBytes > 1024 * 1024 * 500) { // > 500MB
+      score -= 10;
+      report.push("Warning: File size unusually large (>500MB)");
+    }
+    if (probe.bitrateBps && probe.bitrateBps < 1_000_000) { // < 1Mbps
+      score -= 10;
+      report.push("Warning: Video bitrate suspiciously low (<1Mbps)");
+    }
+
+    if (score < 0) score = 0;
+
+    return {
+      valid: score >= 80,
+      score,
+      report,
+    };
+  }
 }
 
 // ─── P0-K MediaEngine Abstraction & Real FFmpeg Engine ───────────────────────

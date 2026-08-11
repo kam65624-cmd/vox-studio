@@ -109,7 +109,7 @@ describe("FFmpegMediaEngine", () => {
 
 describe("Audio, Captions & Thumbnails", () => {
   it("validates audio quality and mixes voice with music", async () => {
-    const { AudioPipeline } = await import("./index");
+    const { AudioPipeline, CaptionEngine, ThumbnailEngine, FinalQAEngine } = await import("./index");
     const voiceBuf = Buffer.from("voice audio stream content data bytes placeholder");
     const report = AudioPipeline.validateAudioQuality(voiceBuf);
     expect(report.valid).toBe(true);
@@ -144,3 +144,43 @@ describe("Audio, Captions & Thumbnails", () => {
     expect(pkg.metadata.profiles).toContain("16:9");
   });
 });
+
+describe("K13 Final Output QA Engine", () => {
+  it("passes valid media with high score", async () => {
+    const { FinalQAEngine, FFmpegMediaEngine } = await import("./index");
+    const probe = {
+      filePath: "test.mp4",
+      formatName: "mp4",
+      durationSeconds: 30,
+      sizeBytes: 15_000_000,
+      bitrateBps: 4_000_000,
+      videoStream: { codec: "h264", width: 1920, height: 1080, fps: 30, aspectRatio: "16:9" },
+      audioStream: { codec: "aac", sampleRate: 48000, channels: 2, loudnessLufs: -14 },
+    };
+    const engine = new FFmpegMediaEngine("mock-ffmpeg", "mock-ffprobe");
+    const result = await FinalQAEngine.performDeepQA(probe, engine);
+    expect(result.valid).toBe(true);
+    expect(result.score).toBe(100);
+    expect(result.report).toHaveLength(0);
+  });
+
+  it("fails deep QA if framerate is too low and missing audio", async () => {
+    const { FinalQAEngine, FFmpegMediaEngine } = await import("./index");
+    const probe = {
+      filePath: "test.mp4",
+      formatName: "mp4",
+      durationSeconds: 3,
+      sizeBytes: 15_000_000,
+      bitrateBps: 4_000_000,
+      videoStream: { codec: "h264", width: 1920, height: 1080, fps: 15, aspectRatio: "16:9" },
+    };
+    const engine = new FFmpegMediaEngine("mock-ffmpeg", "mock-ffprobe");
+    const result = await FinalQAEngine.performDeepQA(probe as any, engine);
+    expect(result.valid).toBe(false);
+    expect(result.score).toBeLessThan(80);
+    expect(result.report).toContain("Duration too short for valid episode (minimum 5s)");
+    expect(result.report).toContain("Video framerate too low (15fps) - target 30fps");
+    expect(result.report).toContain("Missing audio stream");
+  });
+});
+
