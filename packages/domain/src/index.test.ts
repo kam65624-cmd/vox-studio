@@ -21,6 +21,9 @@ import {
   PromptCompiler,
   createProductionExecutionPlan,
   createGenerationJobsFromPlan,
+  assembleShot,
+  assembleScene,
+  assembleEpisode,
 } from "./index";
 import { MentorReview, RefilmTask, CreativeDNA, StyleSkill, Character, Studio, Wardrobe, Prop } from "@vox/contracts";
 
@@ -683,6 +686,45 @@ describe("P0-J Step 1/2 Execution Planner & PromptCompiler", () => {
   });
 });
 
+describe("K7 Assembly Engine", () => {
+  it("assembles a valid shot with video asset", () => {
+    const shot = assembleShot({
+      shotId: "shot-01",
+      sceneId: "scene-01",
+      sequenceIndex: 0,
+      assets: { videoAssetId: "asset-vid-01", durationSeconds: 7 },
+    });
+    expect(shot.isValid).toBe(true);
+    expect(shot.durationSeconds).toBe(7);
+    expect(shot.errors).toHaveLength(0);
+  });
 
+  it("marks shot invalid when video asset is missing", () => {
+    const shot = assembleShot({
+      shotId: "shot-02",
+      sceneId: "scene-01",
+      sequenceIndex: 1,
+      assets: { durationSeconds: 5 },
+    });
+    expect(shot.isValid).toBe(false);
+    expect(shot.errors[0]).toContain("missing video asset");
+  });
 
+  it("assembles a valid scene from shots", () => {
+    const shot = assembleShot({ shotId: "s1", sceneId: "sc1", sequenceIndex: 0, assets: { videoAssetId: "v1", durationSeconds: 8 } });
+    const scene = assembleScene({ sceneId: "sc1", sequenceIndex: 0, shots: [shot] });
+    expect(scene.isValid).toBe(true);
+    expect(scene.totalDurationSeconds).toBe(8);
+  });
 
+  it("assembles a full episode timeline from scenes", () => {
+    const shot1 = assembleShot({ shotId: "s1", sceneId: "sc1", sequenceIndex: 0, assets: { videoAssetId: "v1", durationSeconds: 10 } });
+    const shot2 = assembleShot({ shotId: "s2", sceneId: "sc2", sequenceIndex: 0, assets: { videoAssetId: "v2", durationSeconds: 12 } });
+    const scene1 = assembleScene({ sceneId: "sc1", sequenceIndex: 0, shots: [shot1] });
+    const scene2 = assembleScene({ sceneId: "sc2", sequenceIndex: 1, shots: [shot2] });
+    const episode = assembleEpisode({ episodeId: "ep-001", scenes: [scene2, scene1] }); // reversed order
+    expect(episode.isReadyForRender).toBe(true);
+    expect(episode.totalDurationSeconds).toBe(22);
+    expect(episode.scenes[0]!.sceneId).toBe("sc1"); // sorted by sequenceIndex
+  });
+});

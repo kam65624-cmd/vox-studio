@@ -1331,6 +1331,141 @@ export function createGenerationJobsFromPlan(
     });
 }
 
+// ─── P0-K K7: Shot / Scene / Episode Assembly Engine ─────────────────────────
+
+export interface ShotAssetRef {
+  shotId: string;
+  videoAssetId: string;
+  audioAssetId?: string;
+  captionAssetId?: string;
+  durationSeconds: number;
+}
+
+export interface ShotAssembly {
+  shotId: string;
+  sceneId: string;
+  sequenceIndex: number;
+  videoAssetId: string;
+  audioAssetId?: string;
+  captionAssetId?: string;
+  durationSeconds: number;
+  isValid: boolean;
+  errors: string[];
+}
+
+export interface SceneAssembly {
+  sceneId: string;
+  sequenceIndex: number;
+  shots: ShotAssembly[];
+  totalDurationSeconds: number;
+  videoAssetId?: string;
+  captionAssetId?: string;
+  isValid: boolean;
+  errors: string[];
+}
+
+export interface EpisodeTimeline {
+  episodeId: string;
+  scenes: SceneAssembly[];
+  totalDurationSeconds: number;
+  masterVideoAssetId?: string;
+  masterAudioAssetId?: string;
+  masterCaptionAssetId?: string;
+  isReadyForRender: boolean;
+  errors: string[];
+}
+
+export function assembleShot(input: {
+  shotId: string;
+  sceneId: string;
+  sequenceIndex: number;
+  assets: { videoAssetId?: string; audioAssetId?: string; captionAssetId?: string; durationSeconds?: number };
+}): ShotAssembly {
+  const errors: string[] = [];
+
+  if (!input.assets.videoAssetId) {
+    errors.push(`Shot ${input.shotId}: missing video asset`);
+  }
+  const duration = input.assets.durationSeconds ?? 5;
+  if (duration <= 0) {
+    errors.push(`Shot ${input.shotId}: invalid duration ${duration}s`);
+  }
+
+  const result: ShotAssembly = {
+    shotId: input.shotId,
+    sceneId: input.sceneId,
+    sequenceIndex: input.sequenceIndex,
+    videoAssetId: input.assets.videoAssetId ?? "",
+    durationSeconds: duration,
+    isValid: errors.length === 0,
+    errors,
+  };
+
+  if (input.assets.audioAssetId) result.audioAssetId = input.assets.audioAssetId;
+  if (input.assets.captionAssetId) result.captionAssetId = input.assets.captionAssetId;
+
+  return result;
+}
+
+export function assembleScene(input: {
+  sceneId: string;
+  sequenceIndex: number;
+  shots: ShotAssembly[];
+}): SceneAssembly {
+  const errors: string[] = [];
+  const invalidShots = input.shots.filter((s) => !s.isValid);
+  if (invalidShots.length > 0) {
+    errors.push(`Scene ${input.sceneId}: ${invalidShots.length} shot(s) are invalid`);
+  }
+  if (input.shots.length === 0) {
+    errors.push(`Scene ${input.sceneId}: has no shots`);
+  }
+
+  const totalDurationSeconds = input.shots.reduce((acc, s) => acc + s.durationSeconds, 0);
+
+  return {
+    sceneId: input.sceneId,
+    sequenceIndex: input.sequenceIndex,
+    shots: input.shots,
+    totalDurationSeconds,
+    isValid: errors.length === 0,
+    errors,
+  };
+}
+
+export function assembleEpisode(input: {
+  episodeId: string;
+  scenes: SceneAssembly[];
+  masterAudioAssetId?: string;
+  masterCaptionAssetId?: string;
+}): EpisodeTimeline {
+  const errors: string[] = [];
+  const invalidScenes = input.scenes.filter((s) => !s.isValid);
+  if (invalidScenes.length > 0) {
+    errors.push(`Episode ${input.episodeId}: ${invalidScenes.length} scene(s) are invalid`);
+  }
+  if (input.scenes.length === 0) {
+    errors.push(`Episode ${input.episodeId}: has no scenes`);
+  }
+
+  // Verify chronological ordering
+  const sortedScenes = [...input.scenes].sort((a, b) => a.sequenceIndex - b.sequenceIndex);
+  const totalDurationSeconds = sortedScenes.reduce((acc, s) => acc + s.totalDurationSeconds, 0);
+
+  const timeline: EpisodeTimeline = {
+    episodeId: input.episodeId,
+    scenes: sortedScenes,
+    totalDurationSeconds,
+    isReadyForRender: errors.length === 0,
+    errors,
+  };
+
+  if (input.masterAudioAssetId) timeline.masterAudioAssetId = input.masterAudioAssetId;
+  if (input.masterCaptionAssetId) timeline.masterCaptionAssetId = input.masterCaptionAssetId;
+
+  return timeline;
+}
+
 
 
 
