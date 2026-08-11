@@ -11,9 +11,9 @@ describe("ModelsController", () => {
   it("should list registered models", () => {
     const res = controller.getModels();
     expect(res.models.length).toBeGreaterThan(0);
-    expect(res.models.some((m) => m.modelId === "meta/muse-glimmer-30b")).toBe(true);
-    expect(res.models.some((m) => m.modelId === "zai/glm-5.2")).toBe(true);
-    expect(res.models.some((m) => m.modelId === "qwen/qwen-image-edit")).toBe(true);
+    expect(res.models.some((m: any) => m.modelId === "meta/muse-glimmer-30b")).toBe(true);
+    expect(res.models.some((m: any) => m.modelId === "zai/glm-5.2")).toBe(true);
+    expect(res.models.some((m: any) => m.modelId === "qwen/qwen-image-edit")).toBe(true);
   });
 
   it("should get specific model details", () => {
@@ -25,7 +25,7 @@ describe("ModelsController", () => {
   it("should return providers list", () => {
     const res = controller.getProviders();
     expect(res.providers.length).toBeGreaterThan(0);
-    expect(res.providers.some((p) => p.providerId === "meta")).toBe(true);
+    expect(res.providers.some((p: any) => p.providerId === "meta")).toBe(true);
   });
 
   it("should return capabilities list", () => {
