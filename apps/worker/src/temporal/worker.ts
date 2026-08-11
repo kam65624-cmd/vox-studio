@@ -39,9 +39,8 @@ async function main(): Promise<void> {
     connection,
     namespace:    TEMPORAL_NS,
     taskQueue:    TASK_QUEUE,
+    workflowsPath: require.resolve("./workflow-def"),
     activities,
-    // Workflow definitions are loaded from workflow-def.ts if needed
-    // workflowsPath: require.resolve('./workflow-def'),
     maxConcurrentActivityTaskExecutions: MAX_CONCURRENT,
   });
 

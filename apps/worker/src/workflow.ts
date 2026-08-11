@@ -1,16 +1,17 @@
 /**
- * VOX Studio — Production Workflow Engine (K8)
+ * VOX Studio — Production Workflow Engine (P0-M.2 Track M2 & M3 & M6)
  *
- * Implements the EpisodeProductionWorkflow with 18 idempotent, retry-safe activities.
- * In production this engine's activities are registered as Temporal workflow activities.
- * In mock/test mode the engine runs activities sequentially without Temporal overhead.
+ * Implements the EpisodeProductionWorkflow with 18 idempotent, retry-safe,
+ * state-persisted activities.
  *
- * ARCHITECTURE PRINCIPLE: All business logic lives here.
- * The Temporal SDK (when added) only provides durability, retry, and scheduling.
+ * All state is persisted to disk/storage artifacts after every activity execution.
+ * Every activity checks for existing completed artifacts before executing (Idempotency).
+ * Long-running activities emit heartbeats to Temporal when running in worker mode.
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { Context } from "@temporalio/activity";
 import {
   createProductionExecutionPlan,
   createGenerationJobsFromPlan,
@@ -39,7 +40,17 @@ import {
 } from "@vox/media";
 import type { ProductionState, AssemblyManifest, ProductionRun } from "@vox/contracts";
 
-// ─── Workflow Context ─────────────────────────────────────────────────────────
+// ─── Safe Heartbeat Helper (M6) ───────────────────────────────────────────────
+
+export function safeHeartbeat(details: unknown): void {
+  try {
+    Context.current().heartbeat(details);
+  } catch {
+    // Safe no-op when running outside Temporal activity context (e.g. unit tests)
+  }
+}
+
+// ─── Workflow Context & Types ─────────────────────────────────────────────────
 
 export interface WorkflowContext {
   episodeId: string;
@@ -54,6 +65,7 @@ export interface WorkflowActivityResult {
   durationMs: number;
   data?: unknown;
   error?: string;
+  isIdempotentSkip?: boolean;
 }
 
 export interface WorkflowRunResult {
@@ -95,46 +107,110 @@ export class EpisodeProductionWorkflow {
     };
   }
 
-  /** Persist ProductionRun state to artifacts/mock-e2e/production-run.json */
-  private async persistRunState(state: ProductionState): Promise<void> {
-    this.runRecord.state = state;
-    this.runRecord.updatedAt = new Date().toISOString();
-    const targetDir = path.resolve(this.ctx.outputDir);
-    await fs.mkdir(targetDir, { recursive: true });
+  // ─── State Persistence Helpers (M2 & M3) ───────────────────────────────────
 
-    const runJsonPath = path.join(targetDir, "production-run.json");
-    await fs.writeFile(runJsonPath, JSON.stringify(this.runRecord, null, 2));
+  private getArtifactPath(filename: string): string {
+    return path.join(path.resolve(this.ctx.outputDir), filename);
   }
 
-  /** Run a named activity with timing and error capture */
+  private async writeStateArtifact<T>(filename: string, data: T): Promise<T> {
+    const filePath = this.getArtifactPath(filename);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    return data;
+  }
+
+  private async readStateArtifact<T>(filename: string): Promise<T | null> {
+    try {
+      const filePath = this.getArtifactPath(filename);
+      const content = await fs.readFile(filePath, "utf-8");
+      return JSON.parse(content) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Persist ProductionRun state to production-run.json */
+  public async persistRunState(state: ProductionState): Promise<void> {
+    this.runRecord.state = state;
+    this.runRecord.updatedAt = new Date().toISOString();
+    await this.writeStateArtifact("production-run.json", this.runRecord);
+  }
+
+  /**
+   * Idempotent activity runner wrapper.
+   * Checks if artifact specified by `artifactFile` exists:
+   *   - If yes: returns cached data without executing (Idempotency M3)
+   *   - If no: executes fn(), writes artifact, updates run state, returns result
+   */
   private async runActivity<T>(
     name: string,
+    artifactFile: string,
     fn: () => Promise<T>
-  ): Promise<T | undefined> {
+  ): Promise<T> {
     const start = Date.now();
-    try {
-      const result = await fn();
+
+    // Idempotency check: check if artifact already exists
+    const cached = await this.readStateArtifact<T>(artifactFile);
+    if (cached !== null) {
       this.activities.push({
         activity: name,
         success: true,
-        durationMs: Date.now() - start,
+        durationMs: 0,
+        data: cached,
+        isIdempotentSkip: true,
+      });
+      if (!this.runRecord.completedNodeIds.includes(name)) {
+        this.runRecord.completedNodeIds.push(name);
+      }
+      return cached;
+    }
+
+    // Heartbeat start
+    safeHeartbeat({ activityId: name, phase: name, progress: 0, elapsedMs: 0 });
+
+    try {
+      const result = await fn();
+      const durationMs = Date.now() - start;
+
+      // Persist artifact & state
+      await this.writeStateArtifact(artifactFile, result);
+      if (!this.runRecord.completedNodeIds.includes(name)) {
+        this.runRecord.completedNodeIds.push(name);
+      }
+      await this.persistRunState(this.runRecord.state);
+
+      // Heartbeat completion
+      safeHeartbeat({ activityId: name, phase: name, progress: 100, elapsedMs: durationMs });
+
+      this.activities.push({
+        activity: name,
+        success: true,
+        durationMs,
         data: result,
       });
       return result;
     } catch (err: unknown) {
+      const durationMs = Date.now() - start;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      this.runRecord.failedNodeIds.push(name);
+      await this.persistRunState("FAILED");
+
       this.activities.push({
         activity: name,
         success: false,
-        durationMs: Date.now() - start,
-        error: err instanceof Error ? err.message : String(err),
+        durationMs,
+        error: errorMsg,
       });
-      return undefined;
+      throw err;
     }
   }
 
-  // ─── Activity 01: Load Episode ──────────────────────────────────────────────
-  private async act01_loadEpisode() {
-    return this.runActivity("01_LOAD_EPISODE", async () => {
+  // ─── 18 Activity Implementations (Public for Activity Proxies) ──────────────
+
+  // Activity 01: Load Episode
+  public async activity01LoadEpisode() {
+    return this.runActivity("01_LOAD_EPISODE", "episode.json", async () => {
       return {
         episodeId: this.ctx.episodeId,
         title: `Episode ${this.ctx.episodeId}`,
@@ -146,9 +222,16 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Activity 02: Build Execution Plan ─────────────────────────────────────
-  private async act02_buildExecutionPlan(mockRouter: any) {
-    return this.runActivity("02_BUILD_EXECUTION_PLAN", async () => {
+  // Activity 02: Build Execution Plan
+  public async activity02BuildExecutionPlan(mockRouter?: any) {
+    return this.runActivity("02_BUILD_EXECUTION_PLAN", "execution-plan.json", async () => {
+      const router = mockRouter ?? {
+        selectModel: ({ capability }: any) => ({
+          selectedModel: { modelId: "mock-model" },
+          providerId: "vox-mock",
+        }),
+      };
+
       const mockProductionGraph = {
         id: `pg-${this.ctx.episodeId}`,
         episodeId: this.ctx.episodeId,
@@ -166,18 +249,34 @@ export class EpisodeProductionWorkflow {
       const plan = createProductionExecutionPlan(
         this.ctx.episodeId,
         mockProductionGraph,
-        mockRouter
+        router
       );
       const jobs = createGenerationJobsFromPlan(this.ctx.episodeId, plan);
       return { plan, jobs, nodeCount: plan.nodes.length };
     });
   }
 
-  // ─── Activity 03: Generate Assets (per node) ───────────────────────────────
-  private async act03_generateAssets(jobs: any[]) {
-    return this.runActivity("03_GENERATE_ASSETS", async () => {
+  // Activity 03: Generate Assets (per node) — Long Running (M6)
+  public async activity03GenerateAssets(jobsParam?: any[]) {
+    return this.runActivity("03_GENERATE_ASSETS", "generated-assets.json", async () => {
+      let jobs = jobsParam;
+      if (!jobs) {
+        const planData = await this.readStateArtifact<any>("execution-plan.json");
+        jobs = planData?.jobs ?? [];
+      }
+
+      const safeJobs = jobs ?? [];
       const results: ProviderExecutionResult[] = [];
-      for (const job of jobs) {
+      const total = safeJobs.length;
+      for (let i = 0; i < safeJobs.length; i++) {
+        const job = safeJobs[i];
+        safeHeartbeat({
+          activityId: "03_GENERATE_ASSETS",
+          phase: "GENERATE_ASSETS",
+          progress: Math.round(((i + 1) / Math.max(total, 1)) * 100),
+          currentNodeId: job.productionNodeId,
+        });
+
         const result = await this.engine.executeJob({
           capability: job.capability,
           prompt: job.prompt || "VOX Studio deterministic mock generation",
@@ -186,20 +285,24 @@ export class EpisodeProductionWorkflow {
         });
         results.push(result);
       }
-      return { generatedCount: results.filter((r) => r.success).length, failedCount: results.filter((r) => !r.success).length };
+      return {
+        generatedCount: results.filter((r) => r.success).length,
+        failedCount: results.filter((r) => !r.success).length,
+        results,
+      };
     });
   }
 
-  // ─── Activity 04: Validate Generated Assets ────────────────────────────────
-  private async act04_validateAssets() {
-    return this.runActivity("04_VALIDATE_ASSETS", async () => {
+  // Activity 04: Validate Generated Assets
+  public async activity04ValidateAssets() {
+    return this.runActivity("04_VALIDATE_ASSETS", "asset-validation.json", async () => {
       return { validatedCount: 4, invalidCount: 0, allValid: true };
     });
   }
 
-  // ─── Activity 05: Register Assets ──────────────────────────────────────────
-  private async act05_registerAssets() {
-    return this.runActivity("05_REGISTER_ASSETS", async () => {
+  // Activity 05: Register Assets
+  public async activity05RegisterAssets() {
+    return this.runActivity("05_REGISTER_ASSETS", "assets.json", async () => {
       const assets = [];
       const sceneShots = [
         { sceneId: "sc01", shotId: "sh01", nodeId: "sc01-shot01" },
@@ -223,9 +326,9 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Activity 06: Assemble Shots ───────────────────────────────────────────
-  private async act06_assembleShots() {
-    return this.runActivity("06_ASSEMBLE_SHOTS", async () => {
+  // Activity 06: Assemble Shots
+  public async activity06AssembleShots() {
+    return this.runActivity("06_ASSEMBLE_SHOTS", "shots.json", async () => {
       const shots: ShotAssembly[] = [
         assembleShot({ shotId: "sh01", sceneId: "sc01", sequenceIndex: 0, assets: { videoAssetId: "passet-sc01-v", durationSeconds: 5 } }),
         assembleShot({ shotId: "sh02", sceneId: "sc02", sequenceIndex: 0, assets: { videoAssetId: "passet-sc02-v", durationSeconds: 7 } }),
@@ -235,44 +338,66 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Activity 07: Assemble Scenes ──────────────────────────────────────────
-  private async act07_assembleScenes(shots: ShotAssembly[]) {
-    return this.runActivity("07_ASSEMBLE_SCENES", async () => {
+  // Activity 07: Assemble Scenes
+  public async activity07AssembleScenes(shotsParam?: ShotAssembly[]) {
+    return this.runActivity("07_ASSEMBLE_SCENES", "scenes.json", async () => {
+      let shots = shotsParam;
+      if (!shots) {
+        const shotData = await this.readStateArtifact<any>("shots.json");
+        shots = shotData?.shots ?? [];
+      }
       const scenes: SceneAssembly[] = [
-        assembleScene({ sceneId: "sc01", sequenceIndex: 0, shots: shots.filter((s) => s.sceneId === "sc01") }),
-        assembleScene({ sceneId: "sc02", sequenceIndex: 1, shots: shots.filter((s) => s.sceneId === "sc02") }),
-        assembleScene({ sceneId: "sc03", sequenceIndex: 2, shots: shots.filter((s) => s.sceneId === "sc03") }),
+        assembleScene({ sceneId: "sc01", sequenceIndex: 0, shots: shots!.filter((s) => s.sceneId === "sc01") }),
+        assembleScene({ sceneId: "sc02", sequenceIndex: 1, shots: shots!.filter((s) => s.sceneId === "sc02") }),
+        assembleScene({ sceneId: "sc03", sequenceIndex: 2, shots: shots!.filter((s) => s.sceneId === "sc03") }),
       ];
       return { scenes, validCount: scenes.filter((s) => s.isValid).length };
     });
   }
 
-  // ─── Activity 08: Assemble Episode Timeline ────────────────────────────────
-  private async act08_assembleEpisode(scenes: SceneAssembly[]) {
-    return this.runActivity("08_ASSEMBLE_EPISODE", async () => {
-      const timeline = assembleEpisode({ episodeId: this.ctx.episodeId, scenes });
+  // Activity 08: Assemble Episode Timeline
+  public async activity08AssembleEpisode(scenesParam?: SceneAssembly[]) {
+    return this.runActivity("08_ASSEMBLE_EPISODE", "timeline.json", async () => {
+      let scenes = scenesParam;
+      if (!scenes) {
+        const sceneData = await this.readStateArtifact<any>("scenes.json");
+        scenes = sceneData?.scenes ?? [];
+      }
+      const timeline = assembleEpisode({ episodeId: this.ctx.episodeId, scenes: scenes! });
       return { timeline, totalDurationSeconds: timeline.totalDurationSeconds, isReady: timeline.isReadyForRender };
     });
   }
 
-  // ─── Activity 09: Generate Audio / Voice ───────────────────────────────────
-  private async act09_generateAudio() {
-    return this.runActivity("09_GENERATE_AUDIO", async () => {
+  // Activity 09: Generate Audio / Voice — Long Running (M6)
+  public async activity09GenerateAudio() {
+    return this.runActivity("09_GENERATE_AUDIO", "audio-report.json", async () => {
+      safeHeartbeat({ activityId: "09_GENERATE_AUDIO", phase: "GENERATE_AUDIO", progress: 10 });
+
       const voiceResult = await this.engine.executeJob({
         capability: "VOICE_GENERATION",
         prompt: "وفي عالم اليوم المتسارع تعلم المهارات ضرورة لا رفاهية",
         episodeId: this.ctx.episodeId,
       });
+
+      safeHeartbeat({ activityId: "09_GENERATE_AUDIO", phase: "GENERATE_AUDIO", progress: 80 });
+
       const report = AudioPipeline.validateAudioQuality(Buffer.from("voice-mock-data-48khz-stereo-aac"));
       return { voiceGenerated: voiceResult.success, audioValid: report.valid, durationSeconds: 21 };
     });
   }
 
-  // ─── Activity 10: Generate Captions ────────────────────────────────────────
-  private async act10_generateCaptions(timeline: EpisodeTimeline) {
-    return this.runActivity("10_GENERATE_CAPTIONS", async () => {
-      const segments: CaptionSegment[] = timeline.scenes.flatMap((scene, si) =>
-        scene.shots.map((shot, hi) => ({
+  // Activity 10: Generate Captions
+  public async activity10GenerateCaptions(timelineParam?: EpisodeTimeline) {
+    return this.runActivity("10_GENERATE_CAPTIONS", "captions.json", async () => {
+      let timeline = timelineParam;
+      if (!timeline) {
+        const timelineData = await this.readStateArtifact<any>("timeline.json");
+        timeline = timelineData?.timeline;
+      }
+      const scenes = timeline?.scenes ?? [];
+
+      const segments: CaptionSegment[] = scenes.flatMap((scene: any, si: number) =>
+        (scene.shots ?? []).map((shot: any, hi: number) => ({
           id: si * 10 + hi + 1,
           text: `مشهد ${scene.sceneId} - اللقطة ${shot.shotId}: ماذا يحدث لأسواق المال اليوم؟`,
           startMs: (si * 7000) + (hi * 3000),
@@ -291,9 +416,9 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Activity 11: Mentor QA Review ─────────────────────────────────────────
-  private async act11_mentorReview() {
-    return this.runActivity("11_MENTOR_QA_REVIEW", async () => {
+  // Activity 11: Mentor QA Review
+  public async activity11MentorQAReview() {
+    return this.runActivity("11_MENTOR_QA_REVIEW", "mentor-review.json", async () => {
       return {
         qualityScore: 91,
         approved: true,
@@ -303,31 +428,44 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Activity 12: Continuity Check ─────────────────────────────────────────
-  private async act12_continuityCheck() {
-    return this.runActivity("12_CONTINUITY_CHECK", async () => {
+  // Activity 12: Continuity Check
+  public async activity12ContinuityCheck() {
+    return this.runActivity("12_CONTINUITY_CHECK", "continuity.json", async () => {
       return { driftViolations: 0, consistent: true };
     });
   }
 
-  // ─── Activity 13: Humanization Pass ────────────────────────────────────────
-  private async act13_humanizationPass() {
-    return this.runActivity("13_HUMANIZATION_PASS", async () => {
+  // Activity 13: Humanization Pass
+  public async activity13HumanizationPass() {
+    return this.runActivity("13_HUMANIZATION_PASS", "humanization.json", async () => {
       return { humanizationScore: 87, issuesFixed: 0 };
     });
   }
 
-  // ─── Activity 14: Repair Loop (conditional) ────────────────────────────────
-  private async act14_repairLoop(mentorApproved: boolean) {
-    return this.runActivity("14_REPAIR_LOOP", async () => {
+  // Activity 14: Repair Loop
+  public async activity14RepairLoop(mentorApprovedParam?: boolean) {
+    return this.runActivity("14_REPAIR_LOOP", "repair.json", async () => {
+      let mentorApproved = mentorApprovedParam;
+      if (mentorApproved === undefined) {
+        const mentorData = await this.readStateArtifact<any>("mentor-review.json");
+        mentorApproved = mentorData?.approved ?? true;
+      }
       if (mentorApproved) return { repairsNeeded: false };
       return { repairsNeeded: true, repairsCompleted: 0 };
     });
   }
 
-  // ─── Activity 15: Final Render ─────────────────────────────────────────────
-  private async act15_render(timeline: EpisodeTimeline) {
-    return this.runActivity("15_FINAL_RENDER", async () => {
+  // Activity 15: Final Render — Heavy FFmpeg Render (M6)
+  public async activity15FinalRender(timelineParam?: EpisodeTimeline) {
+    return this.runActivity("15_FINAL_RENDER", "render.json", async () => {
+      let timeline = timelineParam;
+      if (!timeline) {
+        const timelineData = await this.readStateArtifact<any>("timeline.json");
+        timeline = timelineData?.timeline;
+      }
+
+      safeHeartbeat({ activityId: "15_FINAL_RENDER", phase: "FINAL_RENDER", progress: 10 });
+
       const outDir = path.resolve(this.ctx.outputDir);
       await fs.mkdir(outDir, { recursive: true });
       const outputPath = path.join(outDir, `episode-${this.ctx.episodeId}.mp4`);
@@ -335,13 +473,16 @@ export class EpisodeProductionWorkflow {
 
       const manifest = {
         episodeId: this.ctx.episodeId,
-        totalDurationSeconds: timeline.totalDurationSeconds || 21,
+        totalDurationSeconds: timeline?.totalDurationSeconds || 21,
       };
+
+      safeHeartbeat({ activityId: "15_FINAL_RENDER", phase: "FINAL_RENDER", progress: 50 });
 
       const renderResult = await this.mediaEngine.renderVideo(manifest, outputPath);
       await fs.copyFile(outputPath, finalPath);
 
-      // Also register master video in artifact registry
+      safeHeartbeat({ activityId: "15_FINAL_RENDER", phase: "FINAL_RENDER", progress: 90 });
+
       const masterAsset = await this.registry.registerArtifact({
         episodeId: this.ctx.episodeId,
         productionNodeId: "node-master-video",
@@ -361,9 +502,11 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Activity 16: Generate Thumbnails ──────────────────────────────────────
-  private async act16_thumbnails() {
-    return this.runActivity("16_GENERATE_THUMBNAILS", async () => {
+  // Activity 16: Generate Thumbnails
+  public async activity16GenerateThumbnails() {
+    return this.runActivity("16_GENERATE_THUMBNAILS", "thumbnails.json", async () => {
+      safeHeartbeat({ activityId: "16_GENERATE_THUMBNAILS", phase: "THUMBNAILS", progress: 20 });
+
       const pkg = await ThumbnailEngine.generateThumbnails(Buffer.from("frame-data-ep"), 1);
       const outDir = path.resolve(this.ctx.outputDir);
       await fs.mkdir(outDir, { recursive: true });
@@ -373,17 +516,26 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Activity 17: Final Quality Gate ───────────────────────────────────────
-  private async act17_finalQA(outputPath: string) {
-    return this.runActivity("17_FINAL_QA", async () => {
-      const validation = await this.mediaEngine.validate(outputPath);
+  // Activity 17: Final Quality Gate
+  public async activity17FinalQA(outputPathParam?: string) {
+    return this.runActivity("17_FINAL_QA", "final-qa.json", async () => {
+      let outputPath = outputPathParam;
+      if (!outputPath) {
+        const renderData = await this.readStateArtifact<any>("render.json");
+        outputPath = renderData?.outputPath;
+      }
+      const targetPath = outputPath || path.join(path.resolve(this.ctx.outputDir), `episode-${this.ctx.episodeId}.mp4`);
+      safeHeartbeat({ activityId: "17_FINAL_QA", phase: "FINAL_QA", progress: 30 });
+
+      const validation = await this.mediaEngine.validate(targetPath);
       return { valid: validation.valid, errors: validation.errors };
     });
   }
 
-  // ─── Activity 18: Record Completion ────────────────────────────────────────
-  private async act18_recordCompletion(success: boolean) {
-    return this.runActivity("18_RECORD_COMPLETION", async () => {
+  // Activity 18: Record Completion
+  public async activity18RecordCompletion(successParam?: boolean) {
+    return this.runActivity("18_RECORD_COMPLETION", "completion.json", async () => {
+      const success = successParam ?? true;
       return {
         success,
         completedAt: new Date().toISOString(),
@@ -392,7 +544,8 @@ export class EpisodeProductionWorkflow {
     });
   }
 
-  // ─── Main Orchestration ────────────────────────────────────────────────────
+  // ─── Main In-Memory Sequential Orchestration (for backward compat/tests) ──
+
   async run(): Promise<WorkflowRunResult> {
     const workflowStart = Date.now();
     const errors: string[] = [];
@@ -403,83 +556,68 @@ export class EpisodeProductionWorkflow {
     console.log(`\n🎬 VOX EpisodeProductionWorkflow starting — episode: ${this.ctx.episodeId}`);
     console.log(`   Runtime mode: ${this.ctx.runtimeMode.toUpperCase()}\n`);
 
-    // State: DRAFT → ANALYZING
+    // 01 Load Episode
     finalState = "ANALYZING";
     await this.persistRunState(finalState);
-    const episodeData = await this.act01_loadEpisode();
-    this.runRecord.completedNodeIds.push("01_LOAD_EPISODE");
+    await this.activity01LoadEpisode();
     console.log(`  ✓ [01] Episode loaded`);
 
-    // State: ANALYZING → PLANNING
+    // 02 Build Plan
     finalState = "PLANNING";
     await this.persistRunState(finalState);
     const mockRouter = { selectModel: ({ capability }: any) => ({ selectedModel: { modelId: "mock-model" }, providerId: "vox-mock" }) };
-    const planData = await this.act02_buildExecutionPlan(mockRouter);
-    this.runRecord.completedNodeIds.push("02_BUILD_EXECUTION_PLAN");
+    const planData = await this.activity02BuildExecutionPlan(mockRouter);
     console.log(`  ✓ [02] Execution plan built — ${planData?.nodeCount ?? 0} nodes`);
 
-    // State: PLANNING → GENERATING
+    // 03 Generate Assets
     finalState = "GENERATING";
     await this.persistRunState(finalState);
-    await this.act03_generateAssets(planData?.jobs ?? []);
-    this.runRecord.completedNodeIds.push("03_GENERATE_ASSETS");
+    await this.activity03GenerateAssets(planData?.jobs ?? []);
     console.log(`  ✓ [03] Assets generated`);
 
-    // State: GENERATING → VALIDATING
+    // 04 & 05 Validate & Register Assets
     finalState = "VALIDATING";
     await this.persistRunState(finalState);
-    await this.act04_validateAssets();
-    this.runRecord.completedNodeIds.push("04_VALIDATE_ASSETS");
+    await this.activity04ValidateAssets();
     console.log(`  ✓ [04] Assets validated`);
-
-    await this.act05_registerAssets();
-    this.runRecord.completedNodeIds.push("05_REGISTER_ASSETS");
+    await this.activity05RegisterAssets();
     console.log(`  ✓ [05] Assets registered`);
 
-    // State: VALIDATING → ASSEMBLING
+    // 06..08 Assemble Shots, Scenes, Episode
     finalState = "ASSEMBLING";
     await this.persistRunState(finalState);
-    const shotData = await this.act06_assembleShots();
-    this.runRecord.completedNodeIds.push("06_ASSEMBLE_SHOTS");
+    const shotData = await this.activity06AssembleShots();
     console.log(`  ✓ [06] Shots assembled — ${shotData?.validCount ?? 0} valid`);
 
-    const sceneData = await this.act07_assembleScenes(shotData?.shots ?? []);
-    this.runRecord.completedNodeIds.push("07_ASSEMBLE_SCENES");
+    const sceneData = await this.activity07AssembleScenes(shotData?.shots ?? []);
     console.log(`  ✓ [07] Scenes assembled — ${sceneData?.validCount ?? 0} valid`);
 
-    const episodeTimelineData = await this.act08_assembleEpisode(sceneData?.scenes ?? []);
+    const episodeTimelineData = await this.activity08AssembleEpisode(sceneData?.scenes ?? []);
     const timeline = episodeTimelineData?.timeline;
-    this.runRecord.completedNodeIds.push("08_ASSEMBLE_EPISODE");
     console.log(`  ✓ [08] Episode timeline — ${timeline?.totalDurationSeconds ?? 0}s total`);
 
-    await this.act09_generateAudio();
-    this.runRecord.completedNodeIds.push("09_GENERATE_AUDIO");
+    // 09 & 10 Audio & Captions
+    await this.activity09GenerateAudio();
     console.log(`  ✓ [09] Audio/voice generated`);
 
-    await this.act10_generateCaptions(timeline ?? { episodeId: this.ctx.episodeId, scenes: [], totalDurationSeconds: 0, isReadyForRender: false, errors: [] });
-    this.runRecord.completedNodeIds.push("10_GENERATE_CAPTIONS");
+    await this.activity10GenerateCaptions(timeline);
     console.log(`  ✓ [10] Captions generated (SRT + WebVTT + Arabic RTL)`);
 
-    // State: ASSEMBLING → MENTOR_REVIEW
+    // 11..13 QA, Continuity, Humanization
     finalState = "MENTOR_REVIEW";
     await this.persistRunState(finalState);
-    const mentorData = await this.act11_mentorReview();
+    const mentorData = await this.activity11MentorQAReview();
     qualityScore = mentorData?.qualityScore;
-    this.runRecord.qualityScore = qualityScore;
-    this.runRecord.completedNodeIds.push("11_MENTOR_QA_REVIEW");
     console.log(`  ✓ [11] Mentor QA — score: ${qualityScore}`);
 
-    await this.act12_continuityCheck();
-    this.runRecord.completedNodeIds.push("12_CONTINUITY_CHECK");
+    await this.activity12ContinuityCheck();
     console.log(`  ✓ [12] Continuity check passed`);
 
-    await this.act13_humanizationPass();
-    this.runRecord.completedNodeIds.push("13_HUMANIZATION_PASS");
+    await this.activity13HumanizationPass();
     console.log(`  ✓ [13] Humanization pass complete`);
 
-    // Repair loop if needed
-    const repairData = await this.act14_repairLoop(mentorData?.approved ?? true);
-    this.runRecord.completedNodeIds.push("14_REPAIR_LOOP");
+    // 14 Repair
+    const repairData = await this.activity14RepairLoop(mentorData?.approved ?? true);
     if (repairData?.repairsNeeded) {
       finalState = "REPAIRING";
       await this.persistRunState(finalState);
@@ -488,28 +626,24 @@ export class EpisodeProductionWorkflow {
       console.log(`  ✓ [14] No repairs needed`);
     }
 
-    // State: → RENDERING
+    // 15 Render
     finalState = "RENDERING";
     await this.persistRunState(finalState);
-    const renderData = await this.act15_render(
-      timeline ?? { episodeId: this.ctx.episodeId, scenes: [], totalDurationSeconds: 21, isReadyForRender: true, errors: [] }
-    );
+    const renderData = await this.activity15FinalRender(timeline);
     outputMp4 = renderData?.outputPath;
-    this.runRecord.completedNodeIds.push("15_FINAL_RENDER");
     console.log(`  ✓ [15] Render complete → ${outputMp4}`);
 
-    await this.act16_thumbnails();
-    this.runRecord.completedNodeIds.push("16_GENERATE_THUMBNAILS");
+    // 16 Thumbnails
+    await this.activity16GenerateThumbnails();
     console.log(`  ✓ [16] Thumbnails generated`);
 
-    // State: → FINAL_QA
+    // 17 Final QA
     finalState = "FINAL_QA";
     await this.persistRunState(finalState);
-    const qaData = await this.act17_finalQA(outputMp4 ?? "");
-    this.runRecord.completedNodeIds.push("17_FINAL_QA");
+    const qaData = await this.activity17FinalQA(outputMp4);
     console.log(`  ✓ [17] Final QA — valid: ${qaData?.valid}`);
 
-    // State: → COMPLETED / FAILED
+    // 18 Completion
     const success = this.activities.every((a) => a.success);
     if (!success) {
       const failed = this.activities.filter((a) => !a.success);
@@ -519,12 +653,11 @@ export class EpisodeProductionWorkflow {
       finalState = "COMPLETED";
     }
 
-    await this.act18_recordCompletion(success);
-    this.runRecord.completedNodeIds.push("18_RECORD_COMPLETION");
+    await this.activity18RecordCompletion(success);
     await this.persistRunState(finalState);
     console.log(`\n  ${success ? "✅" : "❌"} Workflow ${success ? "COMPLETED" : "FAILED"} — state: ${finalState}\n`);
 
-    // Write manifest.json and report.json to output directory
+    // Write manifest & report artifacts
     const outDir = path.resolve(this.ctx.outputDir);
     await fs.mkdir(outDir, { recursive: true });
 
