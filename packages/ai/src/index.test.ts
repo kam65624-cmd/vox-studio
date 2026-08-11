@@ -134,7 +134,9 @@ describe("P0-I 12 Required Test Scenarios", () => {
   });
 
   // Scenario 8: Constraint Compatibility
-  it("Scenario 8: should respect latency and cost preferences", () => {
+  // qwen/qwen-image-edit is SELF_HOSTED → must never be selected for hosted routing.
+  // dall-e-2 is the correct ONLINE IMAGE_EDITING model at LOW cost.
+  it("Scenario 8: should route IMAGE_EDITING to hosted dall-e-2, not SELF_HOSTED qwen", () => {
     const registry = new ModelRegistry(INITIAL_MODEL_REGISTRY);
     const router = new ModelRouter(registry);
     const response = router.selectModel({
@@ -143,8 +145,12 @@ describe("P0-I 12 Required Test Scenarios", () => {
       latencyRequirement: "FAST",
       costPreference: "LOW",
     });
-    expect(response.selectedModel.modelId).toBe("qwen/qwen-image-edit");
+    // dall-e-2 is the only ONLINE IMAGE_EDITING model in the registry
+    expect(response.selectedModel.modelId).toBe("dall-e-2");
+    // Ensure SELF_HOSTED qwen is never returned for a hosted request
+    expect(response.selectedModel.modelId).not.toBe("qwen/qwen-image-edit");
   });
+
 
   // Scenario 9: Provider Adapter Contract
   it("Scenario 9: UnifiedMockAdapter should fulfill the canonical provider interface", async () => {

@@ -33,6 +33,8 @@ import {
   FFmpegMediaEngine,
   ArtifactRegistry,
   LocalStorageAdapter,
+  createStorageAdapter,
+  AssetDownloader,
   CaptionEngine,
   ThumbnailEngine,
   AudioPipeline,

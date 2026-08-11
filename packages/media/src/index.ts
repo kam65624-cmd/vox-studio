@@ -864,3 +864,11 @@ export {
   type StorageBackend,
   type StorageFactoryConfig,
 } from "./storage-factory";
+
+// ─── N4: Production Asset Downloader ──────────────────────────────────────────
+export {
+  AssetDownloader,
+  type AssetDownloadRequest,
+  type AssetDownloadResult,
+} from "./asset-downloader";
+

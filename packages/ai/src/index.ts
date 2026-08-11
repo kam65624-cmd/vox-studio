@@ -435,6 +435,74 @@ export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
     supportsAudio:           true,
     availability: "ONLINE",
   },
+
+  // ─── Visual & Video Online Models (N3) ───────────────────────────────────
+  {
+    modelId:     "dall-e-3",
+    providerId:  "openai-visual",
+    displayName: "OpenAI DALL-E 3 (Image Gen)",
+    version:     "3.0.0",
+    capabilities: ["IMAGE_GENERATION"],
+    modalities: { inputs: ["text"], outputs: ["image"] },
+    languages:   ["ar", "en"],
+    maxInput:    4000,
+    maxOutput:   1,
+    qualityTier: "PREMIUM",
+    speedTier:   "BALANCED",
+    costTier:    "MEDIUM",
+    supportsStreaming:        false,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  false,
+    supportsImageEditing:    false,
+    supportsVideo:           false,
+    supportsAudio:           false,
+    availability: "ONLINE",
+  },
+  {
+    modelId:     "dall-e-2",
+    providerId:  "openai-visual",
+    displayName: "OpenAI DALL-E 2 (Image Edit)",
+    version:     "2.0.0",
+    capabilities: ["IMAGE_EDITING"],
+    modalities: { inputs: ["text", "image"], outputs: ["image"] },
+    languages:   ["ar", "en"],
+    maxInput:    1000,
+    maxOutput:   1,
+    qualityTier: "HIGH",
+    speedTier:   "FAST",
+    costTier:    "LOW",
+    supportsStreaming:        false,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  true,
+    supportsImageEditing:    true,
+    supportsVideo:           false,
+    supportsAudio:           false,
+    availability: "ONLINE",
+  },
+  {
+    modelId:     "runway/gen-3-alpha",
+    providerId:  "runway-video",
+    displayName: "Runway Gen-3 Alpha (Video Gen)",
+    version:     "3.0.0",
+    capabilities: ["VIDEO_GENERATION"],
+    modalities: { inputs: ["text", "image"], outputs: ["video"] },
+    languages:   ["ar", "en"],
+    maxInput:    1000,
+    maxOutput:   1,
+    qualityTier: "PREMIUM",
+    speedTier:   "BALANCED",
+    costTier:    "HIGH",
+    supportsStreaming:        false,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  true,
+    supportsImageEditing:    false,
+    supportsVideo:           true,
+    supportsAudio:           false,
+    availability: "ONLINE",
+  },
 ];
 
 // ─── Model Registry Store ─────────────────────────────────────────────────────
@@ -642,6 +710,9 @@ export * from "./providers/nvidia/config";
 export * from "./providers/nvidia/adapter";
 
 import { NVIDIAAdapter } from "./providers/nvidia/adapter";
+import { ElevenLabsAdapter } from "./providers/elevenlabs/adapter";
+import { OpenAIVisualAdapter } from "./providers/visual/adapter";
+import { RealVideoAdapter } from "./providers/video/adapter";
 
 export type VoxRuntimeMode = "mock" | "real" | "auto";
 
@@ -661,9 +732,18 @@ export class ProviderExecutionEngine {
     this.adapters.set("elevenlabs", mockAdapter);
     this.adapters.set("runway", mockAdapter);
 
-    // Register real NVIDIA NIM adapter
+    // Register real adapters
     const nvidiaAdapter = new NVIDIAAdapter();
     this.adapters.set(nvidiaAdapter.providerId, nvidiaAdapter);
+
+    const elevenLabsAdapter = new ElevenLabsAdapter();
+    this.adapters.set(elevenLabsAdapter.providerId, elevenLabsAdapter);
+
+    const openAiVisualAdapter = new OpenAIVisualAdapter();
+    this.adapters.set(openAiVisualAdapter.providerId, openAiVisualAdapter);
+
+    const realVideoAdapter = new RealVideoAdapter();
+    this.adapters.set(realVideoAdapter.providerId, realVideoAdapter);
   }
 
   registerAdapter(adapter: UnifiedProviderAdapter): void {
@@ -878,3 +958,14 @@ export {
   type ElevenLabsModelId,
   type ElevenLabsVoiceSettings,
 } from "./providers/elevenlabs/config";
+
+// ─── N1 & N2: Visual & Video Provider Exports ────────────────────────────────
+export { OpenAIVisualAdapter } from "./providers/visual/adapter";
+export { OpenAIVisualClient }  from "./providers/visual/client";
+export { getOpenAIVisualConfig, type OpenAIVisualConfig } from "./providers/visual/config";
+export * from "./providers/visual/types";
+
+export { RealVideoAdapter } from "./providers/video/adapter";
+export { RealVideoClient }  from "./providers/video/client";
+export { getRealVideoConfig, type RealVideoConfig } from "./providers/video/config";
+export * from "./providers/video/types";
