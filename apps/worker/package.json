@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "@types/node": "^22.10.1",
     "@vox/tsconfig": "workspace:*",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }
