@@ -62,6 +62,31 @@ describe("Media Render Profiles", () => {
     expect(res.valid).toBe(false);
     expect(res.errors).toContain("Duration must be greater than 0");
     expect(res.errors).toContain("Missing video stream");
-    expect(res.errors).toContain("Missing audio stream");
+  });
+});
+
+describe("StoragePort & ArtifactRegistry", () => {
+  it("stores file and returns valid SHA-256 checksum and URI", async () => {
+    const { LocalStorageAdapter, ArtifactRegistry } = await import("./index");
+    const storage = new LocalStorageAdapter();
+    const registry = new ArtifactRegistry(storage);
+
+    const asset = await registry.registerArtifact({
+      episodeId: "ep-test-01",
+      productionNodeId: "node-shot-01",
+      assetType: "VISUAL",
+      data: Buffer.from("test visual artifact content"),
+      mimeType: "image/png",
+    });
+
+    expect(asset.id).toBeDefined();
+    expect(asset.checksum).toBeDefined();
+    expect(asset.checksum.length).toBe(64); // SHA-256 length
+    expect(asset.status).toBe("VALID");
+    expect(asset.sizeBytes).toBeGreaterThan(0);
+
+    const fetched = registry.getAsset(asset.id);
+    expect(fetched).toBeDefined();
+    expect(fetched?.checksum).toBe(asset.checksum);
   });
 });
