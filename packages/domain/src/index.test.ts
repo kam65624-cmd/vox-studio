@@ -24,6 +24,7 @@ import {
   assembleShot,
   assembleScene,
   assembleEpisode,
+  runQualityGates,
 } from "./index";
 import { MentorReview, RefilmTask, CreativeDNA, StyleSkill, Character, Studio, Wardrobe, Prop } from "@vox/contracts";
 
@@ -726,5 +727,61 @@ describe("K7 Assembly Engine", () => {
     expect(episode.isReadyForRender).toBe(true);
     expect(episode.totalDurationSeconds).toBe(22);
     expect(episode.scenes[0]!.sceneId).toBe("sc1"); // sorted by sequenceIndex
+  });
+});
+
+describe("K9 Quality Gate Pipeline", () => {
+  it("returns PASS overall when all inputs are healthy", () => {
+    const summary = runQualityGates({
+      episodeId: "ep-qa-01",
+      scriptWordCount: 400,
+      storyNodeCount: 5,
+      entityCount: 4,
+      driftViolationCount: 0,
+      styleConsistencyScore: 92,
+      visualQualityScore: 90,
+      audioQualityScore: 88,
+      captionCoveragePercent: 97,
+      humanizationScore: 83,
+      mediaFileExists: true,
+      mediaHasVideo: true,
+      mediaHasAudio: true,
+    });
+    expect(summary.overallStatus).toBe("PASS");
+    expect(summary.finalScore).toBeGreaterThanOrEqual(80);
+    expect(summary.gates).toHaveLength(10);
+    expect(summary.blocked).toBe(false);
+  });
+
+  it("returns BLOCKED when media is missing", () => {
+    const summary = runQualityGates({
+      episodeId: "ep-qa-02",
+      mediaFileExists: false,
+      mediaHasVideo: false,
+      mediaHasAudio: false,
+    });
+    const mediaGate = summary.gates.find((g) => g.gateId === "G10_MEDIA_INTEGRITY");
+    expect(mediaGate?.status).toBe("BLOCKED");
+    expect(summary.blocked).toBe(true);
+  });
+
+  it("returns REPAIRABLE when continuity has violations", () => {
+    const summary = runQualityGates({
+      episodeId: "ep-qa-03",
+      driftViolationCount: 3,
+      mediaFileExists: true,
+      mediaHasVideo: true,
+      mediaHasAudio: true,
+    });
+    const continuityGate = summary.gates.find((g) => g.gateId === "G04_SCENE_CONTINUITY");
+    expect(["REPAIRABLE", "BLOCKED"]).toContain(continuityGate?.status);
+    expect(summary.repairRequired).toBe(true);
+  });
+
+  it("produces weighted score out of 100", () => {
+    const summary = runQualityGates({ episodeId: "ep-qa-04" });
+    expect(summary.finalScore).toBeGreaterThan(0);
+    expect(summary.finalScore).toBeLessThanOrEqual(100);
+    expect(summary.checkedAt).toBeDefined();
   });
 });
