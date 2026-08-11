@@ -636,4 +636,59 @@ model GenerationProvenance {
   @@index([modelId])
 }
 
+// ─── P0-K Production Assets & Runs ───────────────────────────────────────────
+
+model ProductionAsset {
+  id                 String   @id @default(uuid())
+  episodeId          String
+  projectId          String?
+  productionNodeId   String
+  sceneId            String?
+  shotId             String?
+  assetType          String   // VISUAL | AUDIO | VOICE | CAPTION | THUMBNAIL | SUBTITLE | MASTER_VIDEO
+  status             String   @default("REQUESTED") // REQUESTED | GENERATING | GENERATED | VALIDATING | VALID | INVALID | REPLACED | ARCHIVED
+  uri                String
+  storageKey         String
+  mimeType           String
+  width              Int?
+  height             Int?
+  durationSeconds    Float?
+  fps                Float?
+  codec              String?
+  checksum           String   // SHA-256
+  sizeBytes          BigInt
+  generationJobId   String?
+  modelId            String?
+  providerId         String?
+  creativeDnaVersion Int?
+  styleSkillVersion  String?
+  provenanceId       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([episodeId])
+  @@index([productionNodeId])
+  @@index([generationJobId])
+  @@index([status])
+}
+
+model ProductionRun {
+  id               String   @id @default(uuid())
+  episodeId        String
+  state            String   @default("DRAFT")
+  executionPlanId  String
+  completedNodeIds Json     @default("[]")
+  failedNodeIds    Json     @default("[]")
+  qualityScore     Float?
+  costUsd          Float    @default(0)
+  durationSeconds  Float    @default(0)
+  outputAssetId    String?
+  errorMessage     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([episodeId])
+  @@index([state])
+}
+
 

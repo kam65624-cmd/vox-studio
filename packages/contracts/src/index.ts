@@ -831,6 +831,82 @@ export const ProductionExecutionPlanSchema = z.object({
   createdAt: z.string(),
 });
 
+// ─── P0-K Production Asset Registry, Storage & Assembly ────────────────────
+
+export const ProductionAssetStatusSchema = z.enum([
+  "REQUESTED",
+  "GENERATING",
+  "GENERATED",
+  "VALIDATING",
+  "VALID",
+  "INVALID",
+  "REPLACED",
+  "ARCHIVED",
+]);
+
+export const ProductionAssetSchema = z.object({
+  id: IdSchema,
+  episodeId: IdSchema,
+  projectId: IdSchema.optional(),
+  productionNodeId: z.string(),
+  sceneId: z.string().optional(),
+  shotId: z.string().optional(),
+  assetType: z.enum(["VISUAL", "AUDIO", "VOICE", "CAPTION", "THUMBNAIL", "SUBTITLE", "MASTER_VIDEO"]),
+  status: ProductionAssetStatusSchema,
+  uri: z.string(),
+  storageKey: z.string(),
+  mimeType: z.string(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  durationSeconds: z.number().optional(),
+  fps: z.number().optional(),
+  codec: z.string().optional(),
+  checksum: z.string(), // SHA-256
+  sizeBytes: z.number(),
+  generationJobId: z.string().optional(),
+  modelId: z.string().optional(),
+  providerId: z.string().optional(),
+  creativeDnaVersion: z.number().optional(),
+  styleSkillVersion: z.string().optional(),
+  provenanceId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const ProductionRunSchema = z.object({
+  id: IdSchema,
+  episodeId: IdSchema,
+  state: ProductionStateSchema,
+  executionPlanId: z.string(),
+  completedNodeIds: z.array(z.string()),
+  failedNodeIds: z.array(z.string()),
+  qualityScore: z.number().optional(),
+  costUsd: z.number(),
+  durationSeconds: z.number(),
+  outputAssetId: z.string().optional(),
+  errorMessage: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const AssemblyManifestSchema = z.object({
+  episodeId: IdSchema,
+  renderProfile: ExportProfileSchema,
+  sceneAssets: z.array(
+    z.object({
+      sceneId: z.string(),
+      videoAssetId: z.string(),
+      audioAssetId: z.string().optional(),
+      captionAssetId: z.string().optional(),
+      durationSeconds: z.number(),
+    })
+  ),
+  masterAudioAssetId: z.string().optional(),
+  masterCaptionAssetId: z.string().optional(),
+  totalDurationSeconds: z.number(),
+  generatedAt: z.string(),
+});
+
 export const CompiledPromptSchema = z.object({
   prompt: z.string(),
   negativePrompt: z.string(),
@@ -902,6 +978,10 @@ export type ExecutionPlanNode = z.infer<typeof ExecutionPlanNodeSchema>;
 export type ProductionExecutionPlan = z.infer<typeof ProductionExecutionPlanSchema>;
 export type CompiledPrompt = z.infer<typeof CompiledPromptSchema>;
 export type ProductionState = z.infer<typeof ProductionStateSchema>;
+export type ProductionAssetStatus = z.infer<typeof ProductionAssetStatusSchema>;
+export type ProductionAsset = z.infer<typeof ProductionAssetSchema>;
+export type ProductionRun = z.infer<typeof ProductionRunSchema>;
+export type AssemblyManifest = z.infer<typeof AssemblyManifestSchema>;
 
 
 
