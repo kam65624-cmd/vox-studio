@@ -90,3 +90,19 @@ describe("StoragePort & ArtifactRegistry", () => {
     expect(fetched?.checksum).toBe(asset.checksum);
   });
 });
+
+describe("FFmpegMediaEngine", () => {
+  it("creates media engine instance and exposes MediaEnginePort methods", async () => {
+    const { FFmpegMediaEngine, PROFILES } = await import("./index");
+    process.env["VOX_RUNTIME_MODE"] = "mock";
+    const engine = new FFmpegMediaEngine();
+
+    const probeRes = await engine.probe("./dummy.mp4");
+    expect(probeRes.filePath).toBe("./dummy.mp4");
+    expect(probeRes.videoStream).toBeDefined();
+
+    const renderRes = await engine.renderVideo({ episodeId: "ep-01", totalDurationSeconds: 10 }, "./artifacts/test-output.mp4");
+    expect(renderRes.outputPath).toBe("./artifacts/test-output.mp4");
+    expect(renderRes.checksum.length).toBe(64);
+  });
+});
