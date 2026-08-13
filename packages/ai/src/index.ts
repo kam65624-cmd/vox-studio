@@ -503,6 +503,72 @@ export const INITIAL_MODEL_REGISTRY: ModelDefinition[] = [
     supportsAudio:           false,
     availability: "ONLINE",
   },
+  {
+    modelId:     "black-forest-labs/flux-1.1-pro",
+    providerId:  "replicate",
+    displayName: "FLUX 1.1 Pro (Image Gen via Replicate)",
+    version:     "1.1.0",
+    capabilities: ["IMAGE_GENERATION"],
+    modalities: { inputs: ["text"], outputs: ["image"] },
+    languages:   ["ar", "en"],
+    maxInput:    4000,
+    maxOutput:   1,
+    qualityTier: "PREMIUM",
+    speedTier:   "FAST",
+    costTier:    "MEDIUM",
+    supportsStreaming:        false,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  false,
+    supportsImageEditing:    false,
+    supportsVideo:           false,
+    supportsAudio:           false,
+    availability: "ONLINE",
+  },
+  {
+    modelId:     "black-forest-labs/flux-fill-pro",
+    providerId:  "replicate",
+    displayName: "FLUX Fill Pro (Image Edit via Replicate)",
+    version:     "1.0.0",
+    capabilities: ["IMAGE_EDITING"],
+    modalities: { inputs: ["text", "image"], outputs: ["image"] },
+    languages:   ["ar", "en"],
+    maxInput:    2000,
+    maxOutput:   1,
+    qualityTier: "HIGH",
+    speedTier:   "BALANCED",
+    costTier:    "MEDIUM",
+    supportsStreaming:        false,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  true,
+    supportsImageEditing:    true,
+    supportsVideo:           false,
+    supportsAudio:           false,
+    availability: "ONLINE",
+  },
+  {
+    modelId:     "minimax/video-01",
+    providerId:  "replicate",
+    displayName: "MiniMax Video-01 (Video Gen via Replicate)",
+    version:     "1.0.0",
+    capabilities: ["VIDEO_GENERATION"],
+    modalities: { inputs: ["text", "image"], outputs: ["video"] },
+    languages:   ["ar", "en"],
+    maxInput:    2000,
+    maxOutput:   1,
+    qualityTier: "PREMIUM",
+    speedTier:   "BALANCED",
+    costTier:    "HIGH",
+    supportsStreaming:        false,
+    supportsBatch:           false,
+    supportsStructuredOutput: false,
+    supportsImageReference:  true,
+    supportsImageEditing:    false,
+    supportsVideo:           true,
+    supportsAudio:           false,
+    availability: "ONLINE",
+  },
 ];
 
 // ─── Model Registry Store ─────────────────────────────────────────────────────
@@ -713,6 +779,7 @@ import { NVIDIAAdapter } from "./providers/nvidia/adapter";
 import { ElevenLabsAdapter } from "./providers/elevenlabs/adapter";
 import { OpenAIVisualAdapter } from "./providers/visual/adapter";
 import { RealVideoAdapter } from "./providers/video/adapter";
+import { ReplicateAdapter } from "./providers/replicate/adapter";
 
 export type VoxRuntimeMode = "mock" | "real" | "auto";
 
@@ -744,6 +811,9 @@ export class ProviderExecutionEngine {
 
     const realVideoAdapter = new RealVideoAdapter();
     this.adapters.set(realVideoAdapter.providerId, realVideoAdapter);
+
+    const replicateAdapter = new ReplicateAdapter();
+    this.adapters.set(replicateAdapter.providerId, replicateAdapter);
   }
 
   registerAdapter(adapter: UnifiedProviderAdapter): void {
@@ -969,3 +1039,10 @@ export { RealVideoAdapter } from "./providers/video/adapter";
 export { RealVideoClient }  from "./providers/video/client";
 export { getRealVideoConfig, type RealVideoConfig } from "./providers/video/config";
 export * from "./providers/video/types";
+
+// ─── Replicate Hosted Provider Exports ───────────────────────────────────────
+export { ReplicateAdapter } from "./providers/replicate/adapter";
+export { ReplicateClient }  from "./providers/replicate/client";
+export { getReplicateConfig, type ReplicateConfig } from "./providers/replicate/config";
+export * from "./providers/replicate/types";
+
