@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  episodes  Episode[]
+}
+
+model Episode {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  topic     String
+  language  String   @default("ar")
+  format    String   @default("podcast")
+  durationTargetSec Int @default(45)
+  speakerCount Int   @default(2)
+  sceneCount Int     @default(2)
+  shotCount Int      @default(4)
+  style     String   @default("Premium cinematic podcast")
+  status    String   @default("DRAFT")
+  stage     String?
+  stageMessage String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  productions Production[]
+}
+
+model Production {
+  id          String   @id @default(cuid())
+  episodeId   String
+  episode     Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  workflowId  String   @unique
+  status      String   @default("DRAFT")
+  stage       String   @default("script")
+  runtimeMode String   @default("real")
+  message     String   @default("")
+  progress    Int      @default(0)
+  data        Json?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+}

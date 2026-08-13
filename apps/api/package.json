@@ -1,0 +1,32 @@
+{
+  "name": "@vox/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "true",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/static": "^8.0.3",
+    "@temporalio/client": "^1.11.5",
+    "@vox/config": "workspace:*",
+    "@vox/contracts": "workspace:*",
+    "@vox/database": "workspace:*",
+    "@vox/domain": "workspace:*",
+    "@vox/storage": "workspace:*",
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

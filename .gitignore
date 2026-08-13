@@ -1,0 +1,4 @@
+.env
+/apps/worker/artifacts/
+node_modules/
+*.log
