@@ -17,7 +17,8 @@
     "db:studio": "cd packages/database && pnpm db:studio",
     "vox:mock-e2e": "pnpm --filter @vox/worker exec tsx ../../scripts/mock-e2e.ts",
     "vox:real-visual-video": "pnpm --filter @vox/worker exec tsx ../../scripts/real-visual-video-gate.ts",
-    "vox:real-replicate": "pnpm --filter @vox/worker exec tsx ../../scripts/real-replicate-gate.ts"
+    "vox:real-replicate": "pnpm --filter @vox/worker exec tsx ../../scripts/real-replicate-gate.ts",
+    "vox:produce": "pnpm --filter @vox/worker exec tsx ../../scripts/produce-first-video.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

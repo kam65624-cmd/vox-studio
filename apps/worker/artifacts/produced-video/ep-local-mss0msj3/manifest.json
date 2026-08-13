@@ -1,0 +1,23 @@
+{
+  "episodeId": "ep-local-mss0msj3",
+  "renderProfile": "16:9",
+  "sceneAssets": [
+    {
+      "sceneId": "sc01",
+      "videoAssetId": "passet-sc01-v",
+      "durationSeconds": 7
+    },
+    {
+      "sceneId": "sc02",
+      "videoAssetId": "passet-sc02-v",
+      "durationSeconds": 7
+    },
+    {
+      "sceneId": "sc03",
+      "videoAssetId": "passet-sc03-v",
+      "durationSeconds": 7
+    }
+  ],
+  "totalDurationSeconds": 21,
+  "generatedAt": "2026-08-13T21:13:52.108Z"
+}

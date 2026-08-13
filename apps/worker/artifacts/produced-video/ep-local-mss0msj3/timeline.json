@@ -1,0 +1,66 @@
+{
+  "timeline": {
+    "episodeId": "ep-local-mss0msj3",
+    "scenes": [
+      {
+        "sceneId": "sc01",
+        "sequenceIndex": 0,
+        "shots": [
+          {
+            "shotId": "sh01",
+            "sceneId": "sc01",
+            "sequenceIndex": 0,
+            "videoAssetId": "passet-sc01-v",
+            "durationSeconds": 5,
+            "isValid": true,
+            "errors": []
+          }
+        ],
+        "totalDurationSeconds": 5,
+        "isValid": true,
+        "errors": []
+      },
+      {
+        "sceneId": "sc02",
+        "sequenceIndex": 1,
+        "shots": [
+          {
+            "shotId": "sh02",
+            "sceneId": "sc02",
+            "sequenceIndex": 0,
+            "videoAssetId": "passet-sc02-v",
+            "durationSeconds": 7,
+            "isValid": true,
+            "errors": []
+          }
+        ],
+        "totalDurationSeconds": 7,
+        "isValid": true,
+        "errors": []
+      },
+      {
+        "sceneId": "sc03",
+        "sequenceIndex": 2,
+        "shots": [
+          {
+            "shotId": "sh03",
+            "sceneId": "sc03",
+            "sequenceIndex": 0,
+            "videoAssetId": "passet-sc03-v",
+            "durationSeconds": 6,
+            "isValid": true,
+            "errors": []
+          }
+        ],
+        "totalDurationSeconds": 6,
+        "isValid": true,
+        "errors": []
+      }
+    ],
+    "totalDurationSeconds": 18,
+    "isReadyForRender": true,
+    "errors": []
+  },
+  "totalDurationSeconds": 18,
+  "isReady": true
+}
