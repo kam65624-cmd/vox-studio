@@ -1,0 +1,13 @@
+# VOX Studio
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+*.env
+!.env.example
+coverage/
+.DS_Store
+*.log
+.pnpm-store/
+prisma/migrations/*.sql.bak

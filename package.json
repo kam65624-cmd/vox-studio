@@ -1,0 +1,35 @@
+{
+  "name": "vox-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VOX Studio — AI-native editorial video production OS",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\" --ignore-path .gitignore",
+    "clean": "turbo clean",
+    "db:generate": "turbo db:generate",
+    "db:migrate": "turbo db:migrate",
+    "db:seed": "turbo db:seed",
+    "db:studio": "cd packages/database && pnpm db:studio",
+    "vox:mock-e2e": "pnpm --filter @vox/worker exec tsx ../../scripts/mock-e2e.ts",
+    "vox:real-visual-video": "pnpm --filter @vox/worker exec tsx ../../scripts/real-visual-video-gate.ts",
+    "vox:real-replicate": "pnpm --filter @vox/worker exec tsx ../../scripts/real-replicate-gate.ts",
+    "vox:produce": "pnpm --filter @vox/worker exec tsx ../../scripts/produce-first-video.ts",
+    "vox:fibonacci": "pnpm --filter @vox/worker exec tsx ../../scripts/produce-fibonacci-podcast.ts"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@9.14.4",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
