@@ -1,0 +1,23 @@
+{
+  "episodeId": "mock-e2e-ep101",
+  "renderProfile": "16:9",
+  "sceneAssets": [
+    {
+      "sceneId": "sc01",
+      "videoAssetId": "passet-sc01-v",
+      "durationSeconds": 7
+    },
+    {
+      "sceneId": "sc02",
+      "videoAssetId": "passet-sc02-v",
+      "durationSeconds": 7
+    },
+    {
+      "sceneId": "sc03",
+      "videoAssetId": "passet-sc03-v",
+      "durationSeconds": 7
+    }
+  ],
+  "totalDurationSeconds": 21,
+  "generatedAt": "2026-08-13T20:52:19.795Z"
+}

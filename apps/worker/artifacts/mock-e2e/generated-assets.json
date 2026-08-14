@@ -1,0 +1,90 @@
+{
+  "generatedCount": 4,
+  "failedCount": 0,
+  "results": [
+    {
+      "success": true,
+      "result": {
+        "text": "[Unified Mock Text: Execute production node undefined (undef]",
+        "model": "vox-mock-model",
+        "tokensUsed": 100,
+        "costUsd": 0.0001
+      },
+      "provenance": {
+        "id": "prov-msp73dnb-fhb0",
+        "providerId": "vox-mock-provider",
+        "modelId": "meta/muse-glimmer-30b",
+        "modelVersion": "3.0.0",
+        "generationRequestId": "req-msp73dnb",
+        "episodeId": "mock-e2e-ep101",
+        "createdAt": "2026-08-11T21:51:24.887Z"
+      },
+      "attempts": 1,
+      "selectedModelId": "meta/muse-glimmer-30b",
+      "selectedProviderId": "vox-mock-provider"
+    },
+    {
+      "success": true,
+      "result": {
+        "text": "[Unified Mock Text: Execute production node undefined (undef]",
+        "model": "vox-mock-model",
+        "tokensUsed": 100,
+        "costUsd": 0.0001
+      },
+      "provenance": {
+        "id": "prov-msp73dnb-yqkq",
+        "providerId": "vox-mock-provider",
+        "modelId": "meta/muse-glimmer-30b",
+        "modelVersion": "3.0.0",
+        "generationRequestId": "req-msp73dnb",
+        "episodeId": "mock-e2e-ep101",
+        "createdAt": "2026-08-11T21:51:24.887Z"
+      },
+      "attempts": 1,
+      "selectedModelId": "meta/muse-glimmer-30b",
+      "selectedProviderId": "vox-mock-provider"
+    },
+    {
+      "success": true,
+      "result": {
+        "text": "[Unified Mock Text: Execute production node undefined (undef]",
+        "model": "vox-mock-model",
+        "tokensUsed": 100,
+        "costUsd": 0.0001
+      },
+      "provenance": {
+        "id": "prov-msp73dnb-qsev",
+        "providerId": "vox-mock-provider",
+        "modelId": "meta/muse-glimmer-30b",
+        "modelVersion": "3.0.0",
+        "generationRequestId": "req-msp73dnb",
+        "episodeId": "mock-e2e-ep101",
+        "createdAt": "2026-08-11T21:51:24.887Z"
+      },
+      "attempts": 1,
+      "selectedModelId": "meta/muse-glimmer-30b",
+      "selectedProviderId": "vox-mock-provider"
+    },
+    {
+      "success": true,
+      "result": {
+        "text": "[Unified Mock Text: Execute production node undefined (undef]",
+        "model": "vox-mock-model",
+        "tokensUsed": 100,
+        "costUsd": 0.0001
+      },
+      "provenance": {
+        "id": "prov-msp73dnc-sbcm",
+        "providerId": "vox-mock-provider",
+        "modelId": "meta/muse-glimmer-30b",
+        "modelVersion": "3.0.0",
+        "generationRequestId": "req-msp73dnc",
+        "episodeId": "mock-e2e-ep101",
+        "createdAt": "2026-08-11T21:51:24.888Z"
+      },
+      "attempts": 1,
+      "selectedModelId": "meta/muse-glimmer-30b",
+      "selectedProviderId": "vox-mock-provider"
+    }
+  ]
+}

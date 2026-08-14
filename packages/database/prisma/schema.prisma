@@ -1,0 +1,694 @@
+// VOX Studio — Prisma Schema
+// Full database schema for all domains
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum EpisodeStatus {
+  DRAFT
+  PLANNING
+  STORYBOARDING
+  GENERATING
+  VALIDATING
+  MENTOR_REVIEW
+  REVISING
+  READY_TO_RENDER
+  RENDERING
+  EXPORTED
+}
+
+enum SceneType {
+  HOST
+  EXPLAINER
+  MINI_HOST
+  REACTION
+  DATA
+  METAPHOR
+  ARCHIVE
+  GRAPHIC
+  TRANSITION
+  OUTRO
+}
+
+enum MentorType {
+  STORY
+  SCENE
+  CONTINUITY
+  VISUAL
+  LANGUAGE
+  AUDIO
+  PACING
+  HUMANIZATION
+}
+
+enum MentorSeverity {
+  BLOCKER
+  MAJOR
+  MINOR
+  SUGGESTION
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum ProductionLanguage {
+  ar
+  en
+  ar_en
+}
+
+enum AssetType {
+  CHARACTER
+  STUDIO
+  STYLE
+  VOICE
+  WARDROBE
+  PROP
+  GENERIC
+}
+
+// ─── Workspace & Users ────────────────────────────────────────────────────────
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  WorkspaceMember[]
+  projects Project[]
+  assets   Asset[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceMembers WorkspaceMember[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        String    @default("member")
+  joinedAt    DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+// ─── Projects & Episodes ──────────────────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  episodes     Episode[]
+  creativeDNA  CreativeDNA?
+}
+
+model CreativeDNA {
+  id                 String   @id @default(uuid())
+  projectId          String   @unique
+  styleName          String   @default("VOX Editorial Style")
+  primaryColor       String   @default("#0A0A0A")
+  secondaryColor     String   @default("#F4F1EA")
+  accentColor        String   @default("#FF3B30")
+  fontFamily         String   @default("Anton")
+  composition        String   @default("Magazine Collage")
+  cameraLanguage     String   @default("Snappy 2D pans and focal push-ins")
+  motionLanguage     String   @default("Snappy 12fps paper stop-motion feel")
+  transitionLanguage String   @default("Paper tear & stroke match cuts")
+  negativeRules      String[] @default(["No photorealism", "No 3D renders"])
+  brandRules         String[] @default(["Keep color palette locked"])
+  version            Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Episode {
+  id                 String             @id @default(uuid())
+  projectId          String
+  title              String
+  language           ProductionLanguage @default(en)
+  status             EpisodeStatus      @default(DRAFT)
+  productionRecipeId String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  productionRecipe ProductionRecipe? @relation(fields: [productionRecipeId], references: [id])
+  scripts         Script[]
+  storyGraphs     StoryGraph[]
+  scenes          Scene[]
+  timelines       Timeline[]
+  mentorReviews   MentorReview[]
+  generationJobs  GenerationJob[]
+  renders         Render[]
+  thumbnails      Thumbnail[]
+  exports         Export[]
+}
+
+// ─── Scripts & Stories ────────────────────────────────────────────────────────
+
+model Script {
+  id        String   @id @default(uuid())
+  episodeId String
+  content   String
+  language  ProductionLanguage
+  version   Int      @default(1)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  episode    Episode     @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  storyGraphs StoryGraph[]
+}
+
+model StoryGraph {
+  id        String   @id @default(uuid())
+  episodeId String
+  scriptId  String
+  graphJson Json
+  approved  Boolean  @default(false)
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  script  Script  @relation(fields: [scriptId], references: [id])
+}
+
+// ─── Asset Universe ───────────────────────────────────────────────────────────
+
+model Asset {
+  id          String    @id @default(uuid())
+  workspaceId String
+  type        AssetType
+  name        String
+  slug        String
+  description String?
+  isCanonical Boolean   @default(false)
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions  AssetVersion[]
+
+  @@unique([workspaceId, slug, type])
+}
+
+model AssetVersion {
+  id            String   @id @default(uuid())
+  assetId       String
+  version       Int
+  storageKey    String?
+  previewUrl    String?
+  metadata      Json     @default("{}")
+  isLatest      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, version])
+}
+
+// ─── Characters ───────────────────────────────────────────────────────────────
+
+model Character {
+  id               String   @id @default(uuid())
+  assetId          String   @unique
+  identity         String
+  personality      String
+  allowedStyleIds  String[]
+  allowedStudioIds String[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model CharacterVersion {
+  id              String   @id @default(uuid())
+  characterId     String
+  version         Int
+  visualPrompt    String
+  referenceImages String[]
+  wardrobeId      String?
+  expressions     Json     @default("[]")
+  gestures        Json     @default("[]")
+  createdAt       DateTime @default(now())
+
+  @@unique([characterId, version])
+}
+
+// ─── Studios ──────────────────────────────────────────────────────────────────
+
+model Studio {
+  id          String   @id @default(uuid())
+  assetId     String   @unique
+  description String
+  elements    Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+model Style {
+  id                String   @id @default(uuid())
+  assetId           String   @unique
+  palette           Json     @default("[]")
+  typography        Json     @default("{}")
+  texture           String?
+  composition       String?
+  lighting          String?
+  cameraLanguage    String?
+  motionLanguage    String?
+  transitionLanguage String?
+  graphicsLanguage  String?
+  negativeRules     String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ─── Voices ───────────────────────────────────────────────────────────────────
+
+model Voice {
+  id          String   @id @default(uuid())
+  assetId     String   @unique
+  provider    String
+  providerId  String
+  language    ProductionLanguage
+  gender      String?
+  sampleUrl   String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── Production Recipe ────────────────────────────────────────────────────────
+
+model ProductionRecipe {
+  id                     String   @id @default(uuid())
+  name                   String
+  characterId            String?
+  studioId               String?
+  styleId                String?
+  voiceId                String?
+  wardrobeId             String?
+  defaultTransitionLang  String?
+  captionsEnabled        Boolean  @default(true)
+  musicEnabled           Boolean  @default(false)
+  sfxEnabled             Boolean  @default(false)
+  mentorRules            Json     @default("{}")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  episodes Episode[]
+}
+
+// ─── Scenes ───────────────────────────────────────────────────────────────────
+
+model Scene {
+  id               String    @id @default(uuid())
+  episodeId        String
+  sequenceIndex    Int
+  sceneType        SceneType @default(HOST)
+  narrativePurpose String
+  contractJson     Json
+  status           String    @default("DRAFT")
+  mentorScore      Float?
+  durationSeconds  Float?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  episode       Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  versions      SceneVersion[]
+  generationJobs GenerationJob[]
+  mentorIssues  MentorIssue[]
+}
+
+model SceneVersion {
+  id          String   @id @default(uuid())
+  sceneId     String
+  version     Int
+  mediaKey    String?
+  previewUrl  String?
+  metadata    Json     @default("{}")
+  isLatest    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  scene Scene @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@unique([sceneId, version])
+}
+
+// ─── Timeline ─────────────────────────────────────────────────────────────────
+
+model Timeline {
+  id        String   @id @default(uuid())
+  episodeId String
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  episode Episode         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  tracks  TimelineTrack[]
+}
+
+model TimelineTrack {
+  id         String   @id @default(uuid())
+  timelineId String
+  type       String
+  label      String?
+  order      Int
+  createdAt  DateTime @default(now())
+
+  timeline Timeline       @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  clips    TimelineClip[]
+}
+
+model TimelineClip {
+  id          String   @id @default(uuid())
+  trackId     String
+  startMs     Int
+  durationMs  Int
+  assetRef    String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  track TimelineTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+}
+
+// ─── Generation Jobs ──────────────────────────────────────────────────────────
+
+model GenerationJob {
+  id               String    @id @default(uuid())
+  idempotencyKey   String?   @unique
+  episodeId        String
+  productionNodeId String?
+  sceneId          String?
+  shotId           String?
+  type             String
+  capability       String?
+  modelId          String?
+  providerId       String?
+  status           JobStatus @default(PENDING)
+  priority         Int       @default(1)
+  retryCount       Int       @default(0)
+  maxRetries       Int       @default(3)
+  progress         Int?
+  progressLabel    String?
+  inputJson        Json      @default("{}")
+  resultJson       Json?
+  errorMessage     String?
+  costUsd          Float?
+  temporalRunId    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  episode      Episode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  scene        Scene?        @relation(fields: [sceneId], references: [id])
+  providerRuns ProviderRun[]
+
+  @@index([episodeId])
+  @@index([idempotencyKey])
+}
+
+model ProviderRun {
+  id              String   @id @default(uuid())
+  generationJobId String
+  provider        String
+  model           String?
+  requestJson     Json     @default("{}")
+  responseJson    Json?
+  latencyMs       Int?
+  costUsd         Float?
+  success         Boolean  @default(false)
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  generationJob GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+}
+
+// ─── Mentor ───────────────────────────────────────────────────────────────────
+
+model MentorReview {
+  id           String   @id @default(uuid())
+  episodeId    String
+  qualityScore Float
+  approved     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  episode Episode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  issues  MentorIssue[]
+}
+
+model MentorIssue {
+  id             String         @id @default(uuid())
+  mentorReviewId String
+  sceneId        String?
+  mentorType     MentorType
+  severity       MentorSeverity
+  title          String
+  evidence       String
+  impact         String
+  fixSuggestion  String
+  autoFixable    Boolean        @default(false)
+  resolved       Boolean        @default(false)
+  overridden     Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+
+  mentorReview MentorReview @relation(fields: [mentorReviewId], references: [id], onDelete: Cascade)
+  scene        Scene?       @relation(fields: [sceneId], references: [id])
+}
+
+// ─── Render & Export ──────────────────────────────────────────────────────────
+
+model Render {
+  id          String    @id @default(uuid())
+  episodeId   String
+  status      JobStatus @default(PENDING)
+  profile     String    @default("16:9")
+  storageKey  String?
+  durationMs  Int?
+  sizeBytes   BigInt?
+  errorMessage String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+}
+
+model Thumbnail {
+  id          String   @id @default(uuid())
+  episodeId   String
+  storageKey  String?
+  previewUrl  String?
+  score       Float?
+  isSelected  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+}
+
+model Export {
+  id          String    @id @default(uuid())
+  episodeId   String
+  profile     String
+  status      JobStatus @default(PENDING)
+  storageKey  String?
+  sizeBytes   BigInt?
+  errorMessage String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+}
+
+// ─── Audit & Usage ────────────────────────────────────────────────────────────
+
+model UsageEvent {
+  id         String   @id @default(uuid())
+  episodeId  String?
+  eventType  String
+  metadata   Json     @default("{}")
+  costUsd    Float?
+  createdAt  DateTime @default(now())
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  userId     String?
+  entityType String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+}
+
+// ─── P0-H Refilm Queue ────────────────────────────────────────────────────────
+
+model RefilmTask {
+  id               String   @id @default(uuid())
+  episodeId        String
+  sceneId          String
+  shotId           String?
+  severity         String   // BLOCKER | MAJOR | MINOR | ADVISORY
+  issueType        String
+  description      String
+  rootCause        String
+  suggestedFix     String
+  affectedNodes    Json     @default("[]")
+  dependencyImpact String   @default("")
+  action           String   @default("REPAIR") // REPAIR | REGENERATE | IGNORE | OVERRIDE | COMPARE
+  status           String   @default("OPEN")   // OPEN | PLANNED | RUNNING | RECHECKING | PASSED | FAILED | IGNORED | OVERRIDDEN
+  repairAttempts   Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([episodeId])
+  @@index([episodeId, status])
+}
+
+// ─── P0-I Model Registry & AI Provenance ──────────────────────────────────────
+
+model AiProvider {
+  id          String   @id @default(uuid())
+  providerId  String   @unique
+  name        String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  models AiModel[]
+}
+
+model AiModel {
+  id                String   @id @default(uuid())
+  modelId           String   @unique
+  providerId        String
+  displayName       String
+  version           String
+  qualityTier       String   @default("STANDARD")
+  speedTier         String   @default("BALANCED")
+  costTier          String   @default("MEDIUM")
+  availability      String   @default("ONLINE")
+  configurationJson Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  provider     AiProvider         @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  capabilities AiModelCapability[]
+}
+
+model AiModelCapability {
+  id         String   @id @default(uuid())
+  modelId    String
+  capability String   // TEXT_GENERATION | REASONING | VISION | IMAGE_GENERATION | VIDEO_GENERATION | VOICE_GENERATION | etc.
+
+  model AiModel @relation(fields: [modelId], references: [modelId], onDelete: Cascade)
+
+  @@unique([modelId, capability])
+}
+
+model GenerationProvenance {
+  id                  String   @id @default(uuid())
+  providerId          String
+  modelId             String
+  modelVersion        String
+  generationRequestId String
+  creativeDnaVersion  Int?
+  styleSkillVersion   String?
+  episodeId           String?
+  sceneId             String?
+  shotId              String?
+  productionNodeId    String?
+  createdAt           DateTime @default(now())
+
+  @@index([episodeId])
+  @@index([modelId])
+}
+
+// ─── P0-K Production Assets & Runs ───────────────────────────────────────────
+
+model ProductionAsset {
+  id                 String   @id @default(uuid())
+  episodeId          String
+  projectId          String?
+  productionNodeId   String
+  sceneId            String?
+  shotId             String?
+  assetType          String   // VISUAL | AUDIO | VOICE | CAPTION | THUMBNAIL | SUBTITLE | MASTER_VIDEO
+  status             String   @default("REQUESTED") // REQUESTED | GENERATING | GENERATED | VALIDATING | VALID | INVALID | REPLACED | ARCHIVED
+  uri                String
+  storageKey         String
+  mimeType           String
+  width              Int?
+  height             Int?
+  durationSeconds    Float?
+  fps                Float?
+  codec              String?
+  checksum           String   // SHA-256
+  sizeBytes          BigInt
+  generationJobId   String?
+  modelId            String?
+  providerId         String?
+  creativeDnaVersion Int?
+  styleSkillVersion  String?
+  provenanceId       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([episodeId])
+  @@index([productionNodeId])
+  @@index([generationJobId])
+  @@index([status])
+}
+
+model ProductionRun {
+  id               String   @id @default(uuid())
+  episodeId        String
+  state            String   @default("DRAFT")
+  executionPlanId  String
+  completedNodeIds Json     @default("[]")
+  failedNodeIds    Json     @default("[]")
+  qualityScore     Float?
+  costUsd          Float    @default(0)
+  durationSeconds  Float    @default(0)
+  outputAssetId    String?
+  errorMessage     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([episodeId])
+  @@index([state])
+}
+
+

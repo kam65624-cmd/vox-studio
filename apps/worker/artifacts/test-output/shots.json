@@ -1,0 +1,32 @@
+{
+  "shots": [
+    {
+      "shotId": "sh01",
+      "sceneId": "sc01",
+      "sequenceIndex": 0,
+      "videoAssetId": "passet-sc01-v",
+      "durationSeconds": 5,
+      "isValid": true,
+      "errors": []
+    },
+    {
+      "shotId": "sh02",
+      "sceneId": "sc02",
+      "sequenceIndex": 0,
+      "videoAssetId": "passet-sc02-v",
+      "durationSeconds": 7,
+      "isValid": true,
+      "errors": []
+    },
+    {
+      "shotId": "sh03",
+      "sceneId": "sc03",
+      "sequenceIndex": 0,
+      "videoAssetId": "passet-sc03-v",
+      "durationSeconds": 6,
+      "isValid": true,
+      "errors": []
+    }
+  ],
+  "validCount": 3
+}

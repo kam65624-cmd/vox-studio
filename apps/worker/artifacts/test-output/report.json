@@ -1,0 +1,10 @@
+{
+  "episodeId": "ep-e2e-test",
+  "success": true,
+  "finalState": "COMPLETED",
+  "qualityScore": 91,
+  "totalDurationMs": 182,
+  "activitiesExecuted": 18,
+  "errors": [],
+  "generatedAt": "2026-08-13T20:48:23.654Z"
+}

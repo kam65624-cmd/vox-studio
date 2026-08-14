@@ -1,0 +1,31 @@
+{
+  "id": "prun-ep-e2e-test",
+  "episodeId": "ep-e2e-test",
+  "state": "COMPLETED",
+  "executionPlanId": "plan-ep-e2e-test",
+  "completedNodeIds": [
+    "01_LOAD_EPISODE",
+    "02_BUILD_EXECUTION_PLAN",
+    "03_GENERATE_ASSETS",
+    "04_VALIDATE_ASSETS",
+    "05_REGISTER_ASSETS",
+    "06_ASSEMBLE_SHOTS",
+    "07_ASSEMBLE_SCENES",
+    "08_ASSEMBLE_EPISODE",
+    "09_GENERATE_AUDIO",
+    "10_GENERATE_CAPTIONS",
+    "11_MENTOR_QA_REVIEW",
+    "12_CONTINUITY_CHECK",
+    "13_HUMANIZATION_PASS",
+    "14_REPAIR_LOOP",
+    "15_FINAL_RENDER",
+    "16_GENERATE_THUMBNAILS",
+    "17_FINAL_QA",
+    "18_RECORD_COMPLETION"
+  ],
+  "failedNodeIds": [],
+  "costUsd": 0.84,
+  "durationSeconds": 21,
+  "createdAt": "2026-08-13T20:48:23.468Z",
+  "updatedAt": "2026-08-13T20:48:23.646Z"
+}

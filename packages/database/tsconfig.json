@@ -1,0 +1,9 @@
+{
+  "extends": "@vox/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "prisma", "**/seed.ts", "**/*.test.ts"]
+}

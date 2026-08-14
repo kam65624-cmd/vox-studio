@@ -1,0 +1,35 @@
+{
+  "name": "@vox/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "temporal:worker": "tsx src/temporal/worker.ts",
+    "temporal:up": "docker compose -f ../../docker/temporal/docker-compose.temporal.yml up -d",
+    "temporal:down": "docker compose -f ../../docker/temporal/docker-compose.temporal.yml down",
+    "temporal:logs": "docker compose -f ../../docker/temporal/docker-compose.temporal.yml logs -f temporal"
+  },
+  "dependencies": {
+    "@vox/contracts": "workspace:*",
+    "@vox/domain": "workspace:*",
+    "@vox/ai": "workspace:*",
+    "@vox/media": "workspace:*",
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/workflow": "^1.11.0",
+    "@temporalio/worker": "^1.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@vox/tsconfig": "workspace:*",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

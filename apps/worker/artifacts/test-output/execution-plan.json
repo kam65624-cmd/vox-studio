@@ -1,0 +1,157 @@
+{
+  "plan": {
+    "id": "exec-plan-msp72m3v",
+    "episodeId": "ep-e2e-test",
+    "nodes": [
+      {
+        "dependencies": [],
+        "executionOrder": 1,
+        "parallelizable": true,
+        "blockingDependencies": [],
+        "selectedCapability": "TEXT_GENERATION",
+        "selectedModelId": "gpt-4o",
+        "selectedProviderId": "openai",
+        "estimatedDurationSeconds": 5,
+        "estimatedCostUsd": 0.3,
+        "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+        "action": "GENERATE"
+      },
+      {
+        "dependencies": [
+          "sc01-shot01"
+        ],
+        "executionOrder": 2,
+        "parallelizable": false,
+        "blockingDependencies": [
+          "sc01-shot01"
+        ],
+        "selectedCapability": "TEXT_GENERATION",
+        "selectedModelId": "gpt-4o",
+        "selectedProviderId": "openai",
+        "estimatedDurationSeconds": 5,
+        "estimatedCostUsd": 0.3,
+        "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+        "action": "GENERATE"
+      },
+      {
+        "dependencies": [],
+        "executionOrder": 3,
+        "parallelizable": true,
+        "blockingDependencies": [],
+        "selectedCapability": "TEXT_GENERATION",
+        "selectedModelId": "gpt-4o",
+        "selectedProviderId": "openai",
+        "estimatedDurationSeconds": 5,
+        "estimatedCostUsd": 0.3,
+        "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+        "action": "GENERATE"
+      },
+      {
+        "dependencies": [],
+        "executionOrder": 4,
+        "parallelizable": true,
+        "blockingDependencies": [],
+        "selectedCapability": "TEXT_GENERATION",
+        "selectedModelId": "gpt-4o",
+        "selectedProviderId": "openai",
+        "estimatedDurationSeconds": 5,
+        "estimatedCostUsd": 0.3,
+        "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+        "action": "GENERATE"
+      }
+    ],
+    "totalDurationSeconds": 20,
+    "totalCostUsd": 1.2,
+    "isCostEstimated": true,
+    "requiredAssets": [
+      null
+    ],
+    "preservedAssets": [],
+    "createdAt": "2026-08-11T21:50:49.195Z"
+  },
+  "jobs": [
+    {
+      "id": "gjob-undefined-msp72m3w",
+      "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+      "episodeId": "ep-e2e-test",
+      "capability": "TEXT_GENERATION",
+      "modelId": "gpt-4o",
+      "providerId": "openai",
+      "inputAssets": [],
+      "prompt": "Execute production node undefined (undefined)",
+      "negativePrompt": "No photorealism, No 3D renders",
+      "creativeDnaVersion": 1,
+      "styleSkillVersion": "1.0",
+      "generationParameters": {},
+      "priority": 1,
+      "status": "QUEUED",
+      "retryCount": 0,
+      "maxRetries": 3,
+      "createdAt": "2026-08-11T21:50:49.196Z",
+      "updatedAt": "2026-08-11T21:50:49.196Z"
+    },
+    {
+      "id": "gjob-undefined-msp72m3w",
+      "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+      "episodeId": "ep-e2e-test",
+      "capability": "TEXT_GENERATION",
+      "modelId": "gpt-4o",
+      "providerId": "openai",
+      "inputAssets": [
+        "sc01-shot01"
+      ],
+      "prompt": "Execute production node undefined (undefined)",
+      "negativePrompt": "No photorealism, No 3D renders",
+      "creativeDnaVersion": 1,
+      "styleSkillVersion": "1.0",
+      "generationParameters": {},
+      "priority": 1,
+      "status": "BLOCKED",
+      "retryCount": 0,
+      "maxRetries": 3,
+      "createdAt": "2026-08-11T21:50:49.196Z",
+      "updatedAt": "2026-08-11T21:50:49.196Z"
+    },
+    {
+      "id": "gjob-undefined-msp72m3w",
+      "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+      "episodeId": "ep-e2e-test",
+      "capability": "TEXT_GENERATION",
+      "modelId": "gpt-4o",
+      "providerId": "openai",
+      "inputAssets": [],
+      "prompt": "Execute production node undefined (undefined)",
+      "negativePrompt": "No photorealism, No 3D renders",
+      "creativeDnaVersion": 1,
+      "styleSkillVersion": "1.0",
+      "generationParameters": {},
+      "priority": 1,
+      "status": "QUEUED",
+      "retryCount": 0,
+      "maxRetries": 3,
+      "createdAt": "2026-08-11T21:50:49.196Z",
+      "updatedAt": "2026-08-11T21:50:49.196Z"
+    },
+    {
+      "id": "gjob-undefined-msp72m3w",
+      "idempotencyKey": "idem-ep-e2e-test-undefined-v1-gpt-4o",
+      "episodeId": "ep-e2e-test",
+      "capability": "TEXT_GENERATION",
+      "modelId": "gpt-4o",
+      "providerId": "openai",
+      "inputAssets": [],
+      "prompt": "Execute production node undefined (undefined)",
+      "negativePrompt": "No photorealism, No 3D renders",
+      "creativeDnaVersion": 1,
+      "styleSkillVersion": "1.0",
+      "generationParameters": {},
+      "priority": 1,
+      "status": "QUEUED",
+      "retryCount": 0,
+      "maxRetries": 3,
+      "createdAt": "2026-08-11T21:50:49.196Z",
+      "updatedAt": "2026-08-11T21:50:49.196Z"
+    }
+  ],
+  "nodeCount": 4
+}
